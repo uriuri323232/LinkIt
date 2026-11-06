@@ -4,6 +4,8 @@ import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.ActivityNotFoundException;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -47,6 +49,8 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import java.io.File;
+import java.io.FileInputStream;
+import java.security.MessageDigest;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -65,10 +69,13 @@ public class MainActivity extends Activity {
 
     // תפריט ראשי
     private static final int M_SEARCH = 1, M_PASTE = 2, M_PLACES = 3, M_FAVS = 4,
-            M_NEW = 5, M_SORT = 6, M_HIDDEN = 7, M_REFRESH = 8, M_PASTELINK = 9, M_EXT = 10;
+            M_NEW = 5, M_SORT = 6, M_HIDDEN = 7, M_REFRESH = 8, M_PASTELINK = 9, M_EXT = 10,
+            M_FILTER = 11, M_RECENT = 12, M_LARGE = 13, M_ANALYZE = 14, M_TRASH = 15, M_USETRASH = 16,
+            M_FAVHERE = 17, M_PINHERE = 18;
     // תפריט בחירה
     private static final int A_COPY = 1, A_CUT = 2, A_DELETE = 3, A_SHARE = 4, A_RENAME = 5,
-            A_ZIP = 6, A_UNZIP = 7, A_FAV = 8, A_HOME = 9, A_PROPS = 10, A_ALL = 11, A_LINK = 12, A_OPENWITH = 13, A_TARGET = 14;
+            A_ZIP = 6, A_UNZIP = 7, A_FAV = 8, A_HOME = 9, A_PROPS = 10, A_ALL = 11, A_LINK = 12, A_OPENWITH = 13, A_TARGET = 14,
+            A_COPYPATH = 15, A_INVERT = 16, A_DUP = 17;
 
     private interface Job {
         String run() throws Exception;
@@ -105,6 +112,10 @@ public class MainActivity extends Activity {
     private boolean searchMode;
     private int searchToken;
     private String pendingPath;
+    private int typeFilter;     // 0 הכול, 1 תמונות, 2 סרטונים, 3 שמע, 4 מסמכים, 5 ארכיונים, 6 APK
+    private int scanMode;       // 0 רגיל/חיפוש, 1 אחרונים, 2 גדולים
+    private TextView fab;
+    private static final String[] TYPE_NAMES = {"הכול", "\uD83D\uDDBC תמונות", "\uD83C\uDFAC סרטונים", "\uD83C\uDFB5 שמע", "\uD83D\uDCC4 מסמכים", "\uD83D\uDDDC ארכיונים", "\uD83E\uDD16 APK"};
 
     private int sortKey;        // 0 שם, 1 תאריך, 2 גודל, 3 סוג
     private boolean sortDesc;
@@ -112,6 +123,10 @@ public class MainActivity extends Activity {
 
     private static List<File> clip = new ArrayList<>();
     private static boolean clipCut;
+
+    private int col(int id) {
+        return getResources().getColor(id, getTheme());
+    }
 
     private int dp(int v) {
         return (int) (v * getResources().getDisplayMetrics().density);
@@ -129,6 +144,7 @@ public class MainActivity extends Activity {
         buildUi();
         handleIntent(getIntent());
         Opener.refreshDynamic(this);
+        pool.execute(() -> Trash.purge(this));
     }
 
     @Override
@@ -263,7 +279,7 @@ public class MainActivity extends Activity {
         crumbScroll = new HorizontalScrollView(this);
         crumbScroll.setHorizontalScrollBarEnabled(false);
         crumbScroll.setLayoutDirection(View.LAYOUT_DIRECTION_LTR);
-        crumbScroll.setBackgroundColor(0xFFEEF2F7);
+        crumbScroll.setBackgroundColor(col(R.color.bar_bg));
         crumbs = new LinearLayout(this);
         crumbs.setOrientation(LinearLayout.HORIZONTAL);
         crumbs.setLayoutDirection(View.LAYOUT_DIRECTION_LTR);
@@ -280,7 +296,7 @@ public class MainActivity extends Activity {
 
         FrameLayout body = new FrameLayout(this);
         list = new ListView(this);
-        list.setDivider(new ColorDrawable(0x14000000));
+        list.setDivider(new ColorDrawable(col(R.color.divider)));
         list.setDividerHeight(1);
         list.setChoiceMode(AbsListView.CHOICE_MODE_MULTIPLE_MODAL);
         adapter = new FileAdapter();
@@ -292,18 +308,34 @@ public class MainActivity extends Activity {
         empty = new TextView(this);
         empty.setText("התיקייה ריקה");
         empty.setTextSize(16);
-        empty.setTextColor(0xFF888888);
+        empty.setTextColor(col(R.color.text_hint));
         empty.setGravity(Gravity.CENTER);
         body.addView(empty, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         list.setEmptyView(empty);
+        fab = new TextView(this);
+        fab.setText("+");
+        fab.setTextSize(30);
+        fab.setTextColor(0xFFFFFFFF);
+        fab.setGravity(Gravity.CENTER);
+        GradientDrawable fb = new GradientDrawable();
+        fb.setShape(GradientDrawable.OVAL);
+        fb.setColor(col(R.color.accent));
+        fab.setBackground(fb);
+        fab.setElevation(dp(6));
+        fab.setContentDescription("חדש");
+        fab.setOnClickListener(v -> showNewMenu());
+        FrameLayout.LayoutParams flp = new FrameLayout.LayoutParams(dp(56), dp(56),
+                Gravity.BOTTOM | Gravity.END);
+        flp.setMargins(dp(18), dp(18), dp(18), dp(18));
+        body.addView(fab, flp);
         br.addView(body, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
         status = new TextView(this);
         status.setTextSize(12);
-        status.setTextColor(0xFF666666);
-        status.setBackgroundColor(0xFFEEF2F7);
+        status.setTextColor(col(R.color.text_sub));
+        status.setBackgroundColor(col(R.color.bar_bg));
         status.setPadding(dp(14), dp(5), dp(14), dp(5));
         br.addView(status, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -365,6 +397,7 @@ public class MainActivity extends Activity {
         }
         if (cur != null && !searchMode) positions.put(cur.getPath(), list.getFirstVisiblePosition());
         searchMode = false;
+        scanMode = 0;
         progress.setVisibility(View.GONE);
         cur = dir;
         prefs.edit().putString("last", dir.getPath()).apply();
@@ -391,7 +424,8 @@ public class MainActivity extends Activity {
     private void refreshCurrent() {
         if (cur == null) return;
         if (searchMode) {
-            startSearch(lastQuery);
+            if (scanMode != 0) startScan(scanMode);
+            else startSearch(lastQuery);
             return;
         }
         positions.put(cur.getPath(), list.getFirstVisiblePosition());
@@ -410,7 +444,9 @@ public class MainActivity extends Activity {
     private void applyFilter() {
         shown.clear();
         for (File f : all) {
-            if (filter.isEmpty() || f.getName().toLowerCase(Locale.ROOT).contains(filter)) shown.add(f);
+            if (!(filter.isEmpty() || f.getName().toLowerCase(Locale.ROOT).contains(filter))) continue;
+            if (typeFilter != 0 && !f.isDirectory() && !matchesType(f)) continue;
+            shown.add(f);
         }
         sortList(shown);
         adapter.notifyDataSetChanged();
@@ -419,9 +455,11 @@ public class MainActivity extends Activity {
 
     private void updateStatus() {
         String s = shown.size() + (searchMode ? " תוצאות" : " פריטים");
+        if (typeFilter != 0) s += "   •   " + TYPE_NAMES[typeFilter];
         if (!clip.isEmpty()) s += "   •   בלוח: " + clip.size() + (clipCut ? " (גזירה)" : " (העתקה)");
+        if (cur != null && !searchMode) s += "   •   פנוי: " + FileUtils.formatSize(cur.getFreeSpace());
         status.setText(s);
-        empty.setText(searchMode ? "לא נמצאו תוצאות" : "התיקייה ריקה");
+        empty.setText(searchMode ? "לא נמצאו תוצאות" : (typeFilter != 0 ? "אין קבצים מהסוג שנבחר" : "התיקייה ריקה"));
     }
 
     private void sortList(List<File> l) {
@@ -468,7 +506,7 @@ public class MainActivity extends Activity {
             acc = new File(acc, part);
             TextView sep = new TextView(this);
             sep.setText(" \u203A ");
-            sep.setTextColor(0xFF888888);
+            sep.setTextColor(col(R.color.text_hint));
             crumbs.addView(sep);
             addCrumb(part, acc);
         }
@@ -479,7 +517,7 @@ public class MainActivity extends Activity {
         TextView t = new TextView(this);
         t.setText(label);
         t.setTextSize(14);
-        t.setTextColor(0xFF1565C0);
+        t.setTextColor(col(R.color.accent));
         t.setPadding(dp(4), dp(10), dp(4), dp(10));
         t.setOnClickListener(v -> {
             if (!target.equals(cur) || searchMode) load(target, false);
@@ -519,6 +557,7 @@ public class MainActivity extends Activity {
     private void startSearch(final String q) {
         if (cur == null) return;
         lastQuery = q;
+        scanMode = 0;
         final int token = ++searchToken;
         final File base = cur;
         final String needle = q.toLowerCase(Locale.ROOT);
@@ -538,7 +577,8 @@ public class MainActivity extends Activity {
                 if (kids == null) continue;
                 for (File k : kids) {
                     if (!showHidden && k.getName().startsWith(".")) continue;
-                    if (k.getName().toLowerCase(Locale.ROOT).contains(needle)) res.add(k);
+                    if (k.getName().toLowerCase(Locale.ROOT).contains(needle)
+                            && (typeFilter == 0 || (k.isFile() && matchesType(k)))) res.add(k);
                     if (k.isDirectory() && !java.nio.file.Files.isSymbolicLink(k.toPath())) stack.push(k);
                 }
             }
@@ -552,6 +592,229 @@ public class MainActivity extends Activity {
                 updateStatus();
             });
         });
+    }
+
+
+    // ---------------------------------------------------------------- סוגי קבצים / סריקות
+
+    private boolean matchesType(File f) {
+        return matchesType(f, typeFilter);
+    }
+
+    private boolean matchesType(File f, int type) {
+        String m = FileUtils.mime(f);
+        String e = FileUtils.ext(f.getName());
+        switch (type) {
+            case 1: return m.startsWith("image/");
+            case 2: return m.startsWith("video/");
+            case 3: return m.startsWith("audio/");
+            case 4: return m.startsWith("text/") || m.equals("application/pdf") || m.contains("word")
+                    || m.contains("excel") || m.contains("sheet") || m.contains("presentation")
+                    || m.contains("powerpoint") || m.contains("opendocument") || e.equals("epub")
+                    || e.equals("rtf") || e.equals("csv");
+            case 5: return e.equals("zip") || e.equals("rar") || e.equals("7z") || e.equals("tar")
+                    || e.equals("gz") || e.equals("bz2") || e.equals("xz");
+            case 6: return e.equals("apk") || e.equals("apks") || e.equals("xapk");
+            default: return true;
+        }
+    }
+
+    /** 0 = לא מסונן; מחזיר קטגוריה (1-6) של קובץ לצורך ניתוח אחסון, 7 = אחר. */
+    private int categoryOf(File f) {
+        for (int c = 1; c <= 6; c++) if (matchesType(f, c)) return c;
+        return 7;
+    }
+
+    private void showFilterDialog() {
+        new AlertDialog.Builder(this)
+                .setTitle("סינון לפי סוג")
+                .setSingleChoiceItems(TYPE_NAMES, typeFilter, (d, which) -> {
+                    typeFilter = which;
+                    d.dismiss();
+                    if (searchMode) refreshCurrent();
+                    else applyFilter();
+                })
+                .setNegativeButton("סגור", null)
+                .show();
+    }
+
+    private void resort() {
+        if (searchMode) {
+            if (scanMode == 0) sortList(shown);
+            adapter.notifyDataSetChanged();
+            updateStatus();
+        } else {
+            applyFilter();
+        }
+    }
+
+    /** 1 = קבצים אחרונים, 2 = קבצים גדולים (בתיקייה הנוכחית ותחתיה). */
+    private void startScan(final int mode) {
+        if (cur == null) return;
+        scanMode = mode;
+        final int token = ++searchToken;
+        final File base = cur;
+        if (actionMode != null) actionMode.finish();
+        searchMode = true;
+        shown.clear();
+        adapter.notifyDataSetChanged();
+        progress.setVisibility(View.VISIBLE);
+        setTitle(mode == 1 ? "קבצים אחרונים" : "קבצים גדולים");
+        updateStatus();
+        pool.execute(() -> {
+            List<File> res = new ArrayList<>();
+            ArrayDeque<File> stack = new ArrayDeque<>();
+            stack.push(base);
+            int visited = 0;
+            while (!stack.isEmpty() && visited < 60000 && token == searchToken) {
+                File[] kids = stack.pop().listFiles();
+                if (kids == null) continue;
+                for (File k : kids) {
+                    visited++;
+                    if (!showHidden && k.getName().startsWith(".")) continue;
+                    if (k.isDirectory()) {
+                        if (!java.nio.file.Files.isSymbolicLink(k.toPath())) stack.push(k);
+                    } else if (typeFilter == 0 || matchesType(k)) {
+                        res.add(k);
+                    }
+                }
+            }
+            if (mode == 1) {
+                Collections.sort(res, (a, b) -> Long.compare(b.lastModified(), a.lastModified()));
+            } else {
+                Collections.sort(res, (a, b) -> Long.compare(b.length(), a.length()));
+            }
+            final List<File> top = new ArrayList<>(res.subList(0, Math.min(res.size(), mode == 1 ? 200 : 100)));
+            runOnUiThread(() -> {
+                if (token != searchToken || isFinishing()) return;
+                shown.clear();
+                shown.addAll(top);
+                progress.setVisibility(View.GONE);
+                adapter.notifyDataSetChanged();
+                updateStatus();
+            });
+        });
+    }
+
+    /** ניתוח אחסון: כמה מקום תופס כל סוג קובץ בתיקייה הנוכחית ותחתיה. */
+    private void showAnalyzer() {
+        if (cur == null) return;
+        final File base = cur;
+        progress.setVisibility(View.VISIBLE);
+        pool.execute(() -> {
+            final long[] size = new long[8];
+            final int[] cnt = new int[8];
+            ArrayDeque<File> stack = new ArrayDeque<>();
+            stack.push(base);
+            int visited = 0;
+            while (!stack.isEmpty() && visited < 200000) {
+                File[] kids = stack.pop().listFiles();
+                if (kids == null) continue;
+                for (File k : kids) {
+                    visited++;
+                    if (k.isDirectory()) {
+                        if (!java.nio.file.Files.isSymbolicLink(k.toPath())) stack.push(k);
+                    } else {
+                        int c = categoryOf(k);
+                        size[c] += k.length();
+                        cnt[c]++;
+                    }
+                }
+            }
+            final long free = base.getFreeSpace(), total = base.getTotalSpace();
+            runOnUiThread(() -> {
+                progress.setVisibility(View.GONE);
+                if (isFinishing()) return;
+                StringBuilder sb = new StringBuilder();
+                String[] names = {"", TYPE_NAMES[1], TYPE_NAMES[2], TYPE_NAMES[3], TYPE_NAMES[4],
+                        TYPE_NAMES[5], TYPE_NAMES[6], "📦 אחר"};
+                long sum = 0;
+                for (int i = 1; i <= 7; i++) sum += size[i];
+                for (int i = 1; i <= 7; i++) {
+                    int pct = sum == 0 ? 0 : (int) (size[i] * 100 / sum);
+                    int bars = pct / 10;
+                    StringBuilder bar = new StringBuilder();
+                    for (int b = 0; b < 10; b++) bar.append(b < bars ? '■' : '□');
+                    sb.append(names[i]).append(": ").append(FileUtils.formatSize(size[i]))
+                            .append("  (").append(cnt[i]).append(" קבצים, ").append(pct).append("%)\n")
+                            .append(bar).append("\n\n");
+                }
+                sb.append("סה\"כ בתיקייה: ").append(FileUtils.formatSize(sum));
+                if (total > 0) sb.append("\nפנוי באחסון: ").append(FileUtils.formatSize(free))
+                        .append(" מתוך ").append(FileUtils.formatSize(total));
+                new AlertDialog.Builder(this)
+                        .setTitle("ניתוח אחסון – " + (isRoot(base) ? rootLabel(base) : base.getName()))
+                        .setMessage(sb.toString())
+                        .setPositiveButton("סגור", null)
+                        .setNeutralButton("קבצים גדולים", (d, w) -> startScan(2))
+                        .show();
+            });
+        });
+    }
+
+    // ---------------------------------------------------------------- סל מחזור
+
+    private void showTrash() {
+        final List<Trash.Entry> l = Trash.list(this);
+        if (l.isEmpty()) {
+            new AlertDialog.Builder(this).setTitle("🗑 סל מחזור")
+                    .setMessage("הסל ריק.\nפריטים שנמחקים נשמרים כאן 30 יום ואפשר לשחזר אותם.")
+                    .setPositiveButton("סגור", null).show();
+            return;
+        }
+        String[] labels = new String[l.size()];
+        for (int i = 0; i < labels.length; i++) {
+            Trash.Entry e = l.get(i);
+            labels[i] = new File(e.orig).getName() + "\n" + FileUtils.formatDate(e.time);
+        }
+        new AlertDialog.Builder(this)
+                .setTitle("🗑 סל מחזור (" + l.size() + ")")
+                .setItems(labels, (d, which) -> trashItemMenu(l.get(which)))
+                .setNegativeButton("סגור", null)
+                .setNeutralButton("רוקן סל", (d, w) -> new AlertDialog.Builder(this)
+                        .setMessage("למחוק לצמיתות את כל " + l.size() + " הפריטים?")
+                        .setPositiveButton("מחק הכול", (d2, w2) -> runJob(() -> {
+                            Trash.empty(this);
+                            return "הסל רוקן";
+                        }))
+                        .setNegativeButton("ביטול", null).show())
+                .show();
+    }
+
+    private void trashItemMenu(final Trash.Entry e) {
+        new AlertDialog.Builder(this)
+                .setTitle(new File(e.orig).getName())
+                .setMessage("מקור: " + e.orig)
+                .setPositiveButton("שחזר", (d, w) -> runJob(() -> {
+                    File r = Trash.restore(this, e);
+                    return r == null ? "השחזור נכשל" : "שוחזר אל " + r.getParent();
+                }))
+                .setNegativeButton("מחק לצמיתות", (d, w) -> runJob(() -> {
+                    Trash.remove(this, e);
+                    return "נמחק";
+                }))
+                .setNeutralButton("חזור", (d, w) -> showTrash())
+                .show();
+    }
+
+    private String sha256(File f) {
+        try (FileInputStream in = new FileInputStream(f)) {
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            byte[] b = new byte[65536];
+            int n;
+            while ((n = in.read(b)) > 0) md.update(b, 0, n);
+            StringBuilder sb = new StringBuilder();
+            for (byte x : md.digest()) sb.append(String.format("%02x", x));
+            return sb.toString();
+        } catch (Exception e) {
+            return "—";
+        }
+    }
+
+    private void copyText(String label, String text) {
+        ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+        if (cm != null) cm.setPrimaryClip(ClipData.newPlainText(label, text));
+        toast("הועתק ללוח");
     }
 
     // ---------------------------------------------------------------- תפריט עליון
@@ -588,6 +851,15 @@ public class MainActivity extends Activity {
                 .setCheckable(true).setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER);
         menu.add(0, M_EXT, 6, "קיצורי תיקייה נפתחים במנהל הקבצים שלי")
                 .setCheckable(true).setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER);
+        menu.add(0, M_FILTER, 5, "\uD83D\uDD0E סינון לפי סוג").setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER);
+        menu.add(0, M_RECENT, 5, "\uD83D\uDD52 קבצים אחרונים").setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER);
+        menu.add(0, M_LARGE, 5, "\uD83D\uDCCA קבצים גדולים").setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER);
+        menu.add(0, M_ANALYZE, 5, "\uD83D\uDCBD ניתוח אחסון").setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER);
+        menu.add(0, M_FAVHERE, 5, "\u2B50 הוסף תיקייה זו למועדפים").setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER);
+        menu.add(0, M_PINHERE, 5, "\uD83C\uDFE0 קיצור לתיקייה זו במסך הבית").setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER);
+        menu.add(0, M_TRASH, 6, "\uD83D\uDDD1 סל מחזור").setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER);
+        menu.add(0, M_USETRASH, 6, "מחיקה לסל מחזור (שחזור אפשרי)")
+                .setCheckable(true).setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER);
         menu.add(0, M_REFRESH, 7, "רענן").setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER);
         return true;
     }
@@ -603,6 +875,8 @@ public class MainActivity extends Activity {
         if (pl != null) pl.setVisible(!clip.isEmpty());
         MenuItem hidden = menu.findItem(M_HIDDEN);
         if (hidden != null) hidden.setChecked(showHidden);
+        MenuItem ut = menu.findItem(M_USETRASH);
+        if (ut != null) ut.setChecked(prefs.getBoolean("useTrash", true));
         MenuItem ext = menu.findItem(M_EXT);
         if (ext != null) ext.setChecked(prefs.getBoolean("extFolders", true));
         return super.onPrepareOptionsMenu(menu);
@@ -643,6 +917,33 @@ public class MainActivity extends Activity {
             }
             case M_REFRESH:
                 refreshCurrent();
+                return true;
+            case M_FILTER:
+                showFilterDialog();
+                return true;
+            case M_RECENT:
+                startScan(1);
+                return true;
+            case M_LARGE:
+                startScan(2);
+                return true;
+            case M_ANALYZE:
+                showAnalyzer();
+                return true;
+            case M_TRASH:
+                showTrash();
+                return true;
+            case M_USETRASH: {
+                boolean now = !prefs.getBoolean("useTrash", true);
+                prefs.edit().putBoolean("useTrash", now).apply();
+                toast(now ? "מחיקה תעבור לסל מחזור" : "מחיקה תהיה סופית");
+                return true;
+            }
+            case M_FAVHERE:
+                if (cur != null) addFavorite(cur.getName().isEmpty() ? rootLabel(cur) : cur.getName(), "path", cur.getAbsolutePath());
+                return true;
+            case M_PINHERE:
+                if (cur != null) Opener.pinPath(this, cur);
                 return true;
             default:
                 return super.onOptionsItemSelected(item);
@@ -752,7 +1053,7 @@ public class MainActivity extends Activity {
                         sortDesc = which == 1 || which == 2;
                     }
                     prefs.edit().putInt("sortKey", sortKey).putBoolean("sortDesc", sortDesc).apply();
-                    applyFilter();
+                    resort();
                 })
                 .show();
     }
@@ -986,7 +1287,9 @@ public class MainActivity extends Activity {
     private class SelectionCallback implements AbsListView.MultiChoiceModeListener {
         @Override
         public void onItemCheckedStateChanged(ActionMode mode, int position, long id, boolean checked) {
-            mode.setTitle(list.getCheckedItemCount() + " נבחרו");
+            long total = 0;
+            for (File f : selected()) if (f.isFile()) total += f.length();
+            mode.setTitle(list.getCheckedItemCount() + " נבחרו" + (total > 0 ? " · " + FileUtils.formatSize(total) : ""));
             mode.invalidate();
         }
 
@@ -1006,7 +1309,10 @@ public class MainActivity extends Activity {
             menu.add(0, A_ZIP, 7, "דחוס ל־ZIP").setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER);
             menu.add(0, A_UNZIP, 8, "חלץ כאן").setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER);
             menu.add(0, A_PROPS, 9, "מאפיינים").setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER);
+            menu.add(0, A_DUP, 6, "שכפל").setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER);
+            menu.add(0, A_COPYPATH, 9, "העתק נתיב").setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER);
             menu.add(0, A_ALL, 10, "בחר הכול").setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER);
+            menu.add(0, A_INVERT, 10, "הפוך בחירה").setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER);
             return true;
         }
 
@@ -1035,7 +1341,7 @@ public class MainActivity extends Activity {
         @Override
         public boolean onActionItemClicked(ActionMode mode, MenuItem item) {
             List<File> sel = selected();
-            if (sel.isEmpty() && item.getItemId() != A_ALL) return true;
+            if (sel.isEmpty() && item.getItemId() != A_ALL && item.getItemId() != A_INVERT) return true;
             switch (item.getItemId()) {
                 case A_COPY:
                 case A_CUT:
@@ -1096,6 +1402,27 @@ public class MainActivity extends Activity {
                     return true;
                 case A_ALL:
                     for (int i = 0; i < shown.size(); i++) list.setItemChecked(i, true);
+                    return true;
+                case A_INVERT:
+                    for (int i = 0; i < shown.size(); i++) list.setItemChecked(i, !list.isItemChecked(i));
+                    return true;
+                case A_COPYPATH: {
+                    StringBuilder sb = new StringBuilder();
+                    for (File f : sel) sb.append(sb.length() > 0 ? "\n" : "").append(f.getAbsolutePath());
+                    copyText("path", sb.toString());
+                    mode.finish();
+                    return true;
+                }
+                case A_DUP:
+                    runJob(() -> {
+                        int n = 0;
+                        for (File f : sel) {
+                            File t = FileUtils.uniqueDest(f.getParentFile(), f.getName(), f.isDirectory());
+                            FileUtils.copy(f, t);
+                            n++;
+                        }
+                        return "שוכפלו " + n + " פריטים";
+                    });
                     return true;
                 default:
                     return false;
@@ -1166,14 +1493,19 @@ public class MainActivity extends Activity {
     private void confirmDelete(final List<File> sel, final ActionMode mode) {
         String msg = sel.size() == 1 ? "למחוק את \"" + sel.get(0).getName() + "\"?"
                 : "למחוק " + sel.size() + " פריטים?";
+        final boolean trash = prefs.getBoolean("useTrash", true);
         new AlertDialog.Builder(this)
-                .setTitle("מחיקה")
-                .setMessage(msg + "\nלא ניתן לשחזר.")
-                .setPositiveButton("מחק", (d, w) -> runJob(() -> {
+                .setTitle(trash ? "העברה לסל מחזור" : "מחיקה")
+                .setMessage(msg + (trash ? "\nאפשר לשחזר מסל המחזור במשך 30 יום." : "\nלא ניתן לשחזר."))
+                .setPositiveButton(trash ? "העבר לסל" : "מחק", (d, w) -> runJob(() -> {
                     int fail = 0;
-                    for (File f : sel) if (!FileUtils.deleteRecursive(f)) fail++;
+                    for (File f : sel) {
+                        boolean ok = trash && !Trash.isInTrash(f) ? Trash.put(this, f) : FileUtils.deleteRecursive(f);
+                        if (!ok) fail++;
+                    }
                     clip.removeAll(sel);
-                    return fail == 0 ? "נמחקו " + sel.size() + " פריטים" : "חלק מהפריטים לא נמחקו";
+                    return fail == 0 ? (trash ? "הועברו לסל " : "נמחקו ") + sel.size() + " פריטים"
+                            : "חלק מהפריטים לא נמחקו";
                 }))
                 .setNegativeButton("ביטול", null)
                 .show();
@@ -1259,10 +1591,16 @@ public class MainActivity extends Activity {
             long[] st = FileUtils.stats(f);
             String tail = "גודל: " + FileUtils.formatSize(st[0]) + " (" + st[0] + " בייט)";
             if (f.isDirectory()) tail += "\nקבצים: " + st[1] + "   תיקיות: " + Math.max(0, st[2] - 1);
-            final String t = tail;
+            final String t0 = tail;
             runOnUiThread(() -> {
-                if (dlg.isShowing()) dlg.setMessage(head + t);
+                if (dlg.isShowing()) dlg.setMessage(head + t0);
             });
+            if (f.isFile() && f.length() <= 200L * 1024 * 1024) {
+                final String h = sha256(f);
+                runOnUiThread(() -> {
+                    if (dlg.isShowing()) dlg.setMessage(head + t0 + "\nSHA-256:\n" + h);
+                });
+            }
         });
     }
 
@@ -1364,8 +1702,8 @@ public class MainActivity extends Activity {
                 row.setPadding(dp(14), dp(8), dp(14), dp(8));
                 row.setMinimumHeight(dp(60));
                 StateListDrawable sd = new StateListDrawable();
-                sd.addState(new int[]{android.R.attr.state_activated}, new ColorDrawable(0x331565C0));
-                sd.addState(new int[]{android.R.attr.state_pressed}, new ColorDrawable(0x22000000));
+                sd.addState(new int[]{android.R.attr.state_activated}, new ColorDrawable(col(R.color.accent_sel)));
+                sd.addState(new int[]{android.R.attr.state_pressed}, new ColorDrawable(col(R.color.press)));
                 sd.addState(new int[]{}, new ColorDrawable(Color.TRANSPARENT));
                 row.setBackground(sd);
 
@@ -1377,12 +1715,12 @@ public class MainActivity extends Activity {
                 h.arrow.setText("\u2197");
                 h.arrow.setTextSize(11);
                 h.arrow.setTypeface(null, android.graphics.Typeface.BOLD);
-                h.arrow.setTextColor(0xFF1565C0);
+                h.arrow.setTextColor(col(R.color.accent));
                 h.arrow.setGravity(Gravity.CENTER);
                 GradientDrawable ab = new GradientDrawable();
                 ab.setShape(GradientDrawable.OVAL);
-                ab.setColor(0xFFFFFFFF);
-                ab.setStroke(1, 0xFF1565C0);
+                ab.setColor(col(R.color.surface));
+                ab.setStroke(1, col(R.color.accent));
                 h.arrow.setBackground(ab);
                 FrameLayout iconBox = new FrameLayout(MainActivity.this);
                 iconBox.setMinimumHeight(dp(44));
@@ -1403,13 +1741,13 @@ public class MainActivity extends Activity {
                 clp.setMarginStart(dp(10));
                 h.name = new TextView(MainActivity.this);
                 h.name.setTextSize(16);
-                h.name.setTextColor(0xFF111111);
+                h.name.setTextColor(col(R.color.text_primary));
                 h.name.setSingleLine(true);
                 h.name.setEllipsize(TextUtils.TruncateAt.MIDDLE);
                 h.name.setTextAlignment(View.TEXT_ALIGNMENT_VIEW_START);
                 h.sub = new TextView(MainActivity.this);
                 h.sub.setTextSize(12);
-                h.sub.setTextColor(0xFF777777);
+                h.sub.setTextColor(col(R.color.text_sub));
                 h.sub.setMaxLines(2);
                 h.sub.setEllipsize(TextUtils.TruncateAt.END);
                 h.sub.setTextAlignment(View.TEXT_ALIGNMENT_VIEW_START);

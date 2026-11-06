@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="bar_bg">#FFEEF2F7</color>
+    <color name="accent">#FF1565C0</color>
+    <color name="accent_sel">#331565C0</color>
+    <color name="press">#22000000</color>
+    <color name="divider">#14000000</color>
+    <color name="text_primary">#FF111111</color>
+    <color name="text_sub">#FF777777</color>
+    <color name="text_hint">#FF888888</color>
+    <color name="surface">#FFFFFFFF</color>
+</resources>
