@@ -1,8 +1,11 @@
 package com.lnk.shortcuts;
 
 import android.content.Context;
+import android.database.Cursor;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Environment;
+import android.provider.DocumentsContract;
 import android.webkit.MimeTypeMap;
 
 import androidx.core.content.FileProvider;
@@ -28,6 +31,53 @@ import java.util.zip.ZipOutputStream;
 final class FileUtils {
 
     private FileUtils() {
+    }
+
+    static boolean hasAccess(Context c) {
+        if (Build.VERSION.SDK_INT >= 30) return Environment.isExternalStorageManager();
+        return c.checkSelfPermission(android.Manifest.permission.READ_EXTERNAL_STORAGE)
+                == android.content.pm.PackageManager.PERMISSION_GRANTED
+                && c.checkSelfPermission(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                == android.content.pm.PackageManager.PERMISSION_GRANTED;
+    }
+
+    /** מנסה לזהות נתיב אמיתי מתוך Uri שמנהל קבצים אחר שיתף. null אם לא הצליח. */
+    static File fromUri(Context c, Uri u) {
+        try {
+            if ("file".equals(u.getScheme())) {
+                File f = new File(u.getPath());
+                return f.exists() ? f : null;
+            }
+            if (!"content".equals(u.getScheme())) return null;
+            if ("com.android.externalstorage.documents".equals(u.getAuthority())) {
+                String id = DocumentsContract.getDocumentId(u);
+                int i = id.indexOf(':');
+                if (i > 0) {
+                    String vol = id.substring(0, i);
+                    File base = "primary".equalsIgnoreCase(vol)
+                            ? Environment.getExternalStorageDirectory() : new File("/storage/" + vol);
+                    File f = new File(base, id.substring(i + 1));
+                    if (f.exists()) return f;
+                }
+            }
+            try (Cursor cur = c.getContentResolver().query(u, new String[]{"_data"}, null, null, null)) {
+                if (cur != null && cur.moveToFirst()) {
+                    String p = cur.getString(0);
+                    if (p != null && new File(p).exists()) return new File(p);
+                }
+            } catch (Exception ignored) {
+            }
+            String path = Uri.decode(u.getPath() == null ? "" : u.getPath());
+            for (String m : new String[]{"/storage/", "/sdcard/", "/mnt/sdcard/"}) {
+                int i = path.indexOf(m);
+                if (i >= 0) {
+                    File f = new File(path.substring(i));
+                    if (f.exists()) return f;
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
     }
 
     static String formatSize(long b) {

@@ -9,12 +9,15 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.Icon;
 import android.graphics.drawable.StateListDrawable;
 import android.net.Uri;
+import android.media.ThumbnailUtils;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
@@ -27,6 +30,7 @@ import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
+import android.util.LruCache;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.AbsListView;
 import android.widget.BaseAdapter;
@@ -34,6 +38,7 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.HorizontalScrollView;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ListView;
 import android.widget.ProgressBar;
@@ -60,10 +65,10 @@ public class MainActivity extends Activity {
 
     // תפריט ראשי
     private static final int M_SEARCH = 1, M_PASTE = 2, M_PLACES = 3, M_FAVS = 4,
-            M_NEW = 5, M_SORT = 6, M_HIDDEN = 7, M_REFRESH = 8;
+            M_NEW = 5, M_SORT = 6, M_HIDDEN = 7, M_REFRESH = 8, M_PASTELINK = 9;
     // תפריט בחירה
     private static final int A_COPY = 1, A_CUT = 2, A_DELETE = 3, A_SHARE = 4, A_RENAME = 5,
-            A_ZIP = 6, A_UNZIP = 7, A_FAV = 8, A_HOME = 9, A_PROPS = 10, A_ALL = 11, A_LINK = 12;
+            A_ZIP = 6, A_UNZIP = 7, A_FAV = 8, A_HOME = 9, A_PROPS = 10, A_ALL = 11, A_LINK = 12, A_OPENWITH = 13, A_TARGET = 14;
 
     private interface Job {
         String run() throws Exception;
@@ -88,6 +93,13 @@ public class MainActivity extends Activity {
     private final List<File> shown = new ArrayList<>();
     private final Map<String, Integer> positions = new HashMap<>();
     private final Map<String, String[]> lnkCache = new HashMap<>();
+    private final ExecutorService thumbPool = Executors.newFixedThreadPool(3);
+    private final LruCache<String, Bitmap> thumbCache = new LruCache<String, Bitmap>(8 * 1024) {
+        @Override
+        protected int sizeOf(String key, Bitmap b) {
+            return b.getByteCount() / 1024;
+        }
+    };
     private String filter = "";
     private String lastQuery = "";
     private boolean searchMode;
@@ -172,6 +184,7 @@ public class MainActivity extends Activity {
     protected void onDestroy() {
         super.onDestroy();
         pool.shutdownNow();
+        thumbPool.shutdownNow();
     }
 
     @Override
@@ -566,6 +579,7 @@ public class MainActivity extends Activity {
             }
         });
         menu.add(0, M_PASTE, 1, "הדבק").setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM);
+        menu.add(0, M_PASTELINK, 1, "\uD83D\uDD17 הדבק כקיצור דרך").setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER);
         menu.add(0, M_PLACES, 2, "\uD83D\uDCCD מקומות").setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER);
         menu.add(0, M_FAVS, 3, "\u2B50 מועדפים וקיצורים").setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER);
         menu.add(0, M_NEW, 4, "\u2795 חדש…").setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER);
@@ -583,6 +597,8 @@ public class MainActivity extends Activity {
             paste.setVisible(!clip.isEmpty());
             paste.setTitle((clipCut ? "הדבק (העברה " : "הדבק (") + clip.size() + ")");
         }
+        MenuItem pl = menu.findItem(M_PASTELINK);
+        if (pl != null) pl.setVisible(!clip.isEmpty());
         MenuItem hidden = menu.findItem(M_HIDDEN);
         if (hidden != null) hidden.setChecked(showHidden);
         return super.onPrepareOptionsMenu(menu);
@@ -593,6 +609,9 @@ public class MainActivity extends Activity {
         switch (item.getItemId()) {
             case M_PASTE:
                 paste();
+                return true;
+            case M_PASTELINK:
+                pasteAsLinks();
                 return true;
             case M_PLACES:
                 showPlaces();
@@ -625,7 +644,7 @@ public class MainActivity extends Activity {
         final List<String> labels = new ArrayList<>();
         final List<File> targets = new ArrayList<>();
         for (File r : FileUtils.storageRoots(this)) {
-            labels.add("\uD83D\uDCBE " + rootLabel(r));
+            labels.add("\uD83D\uDCBE " + rootLabel(r) + "  (" + FileUtils.formatSize(r.getFreeSpace()) + " פנויים)");
             targets.add(r);
         }
         String[][] std = {
@@ -872,6 +891,56 @@ public class MainActivity extends Activity {
         refreshCurrent();
     }
 
+    /** כמו "הדבק קיצור דרך" בווינדוס: מעתיקים פריט, נכנסים לתיקייה, ומדביקים אותו כקיצור. */
+    private void pasteAsLinks() {
+        if (clip.isEmpty() || cur == null) return;
+        if (searchMode) {
+            toast("צא ממצב חיפוש כדי להדביק");
+            return;
+        }
+        int n = 0;
+        for (File f : clip) {
+            try {
+                ShortcutFile.create(cur, f.getName(), "path", f.getAbsolutePath());
+                n++;
+            } catch (Exception ignored) {
+            }
+        }
+        toast(n == 0 ? "יצירת הקיצור נכשלה" : "נוצרו " + n + " קיצורי דרך");
+        refreshCurrent();
+    }
+
+    private void openWith(File f) {
+        try {
+            Intent i = new Intent(Intent.ACTION_VIEW);
+            i.setDataAndType(FileUtils.uri(this, f), FileUtils.mime(f));
+            i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            startActivity(Intent.createChooser(i, "פתח באמצעות"));
+        } catch (Exception e) {
+            toast("אין אפליקציה שיכולה לפתוח קובץ זה");
+        }
+    }
+
+    private Bitmap makeThumb(File f, boolean video) {
+        try {
+            int s = dp(44) * 2;
+            if (video) {
+                if (Build.VERSION.SDK_INT < 29) return null;
+                return ThumbnailUtils.createVideoThumbnail(f, new android.util.Size(s, s), null);
+            }
+            BitmapFactory.Options o = new BitmapFactory.Options();
+            o.inJustDecodeBounds = true;
+            BitmapFactory.decodeFile(f.getPath(), o);
+            int sample = 1;
+            while (o.outWidth / (sample * 2) >= s && o.outHeight / (sample * 2) >= s) sample *= 2;
+            o.inJustDecodeBounds = false;
+            o.inSampleSize = sample;
+            return BitmapFactory.decodeFile(f.getPath(), o);
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
     private String[] lnkInfo(File f) {
         String k = f.getPath() + "|" + f.lastModified();
         if (lnkCache.containsKey(k)) return lnkCache.get(k);
@@ -920,6 +989,8 @@ public class MainActivity extends Activity {
             menu.add(0, A_HOME, 3, "\uD83C\uDFE0 קיצור למסך הבית").setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER);
             menu.add(0, A_FAV, 4, "\u2B50 הוסף למועדפים").setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER);
             menu.add(0, A_SHARE, 5, "שתף").setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER);
+            menu.add(0, A_OPENWITH, 5, "פתח באמצעות…").setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER);
+            menu.add(0, A_TARGET, 5, "\uD83D\uDCC2 פתח מיקום יעד").setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER);
             menu.add(0, A_RENAME, 6, "שנה שם").setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER);
             menu.add(0, A_ZIP, 7, "דחוס ל־ZIP").setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER);
             menu.add(0, A_UNZIP, 8, "חלץ כאן").setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER);
@@ -937,6 +1008,13 @@ public class MainActivity extends Activity {
             menu.findItem(A_RENAME).setVisible(one);
             menu.findItem(A_HOME).setVisible(one);
             menu.findItem(A_PROPS).setVisible(one);
+            menu.findItem(A_OPENWITH).setVisible(one && sel.get(0).isFile());
+            boolean lnkPath = false;
+            if (one && ShortcutFile.is(sel.get(0))) {
+                String[] t = ShortcutFile.read(sel.get(0));
+                lnkPath = t != null && "path".equals(t[0]);
+            }
+            menu.findItem(A_TARGET).setVisible(lnkPath);
             menu.findItem(A_SHARE).setVisible(!anyDir && !sel.isEmpty());
             menu.findItem(A_UNZIP).setVisible(one && sel.get(0).isFile()
                     && FileUtils.ext(sel.get(0).getName()).equals("zip"));
@@ -980,6 +1058,20 @@ public class MainActivity extends Activity {
                     toast("נוסף למועדפים");
                     mode.finish();
                     return true;
+                case A_OPENWITH:
+                    openWith(sel.get(0));
+                    return true;
+                case A_TARGET: {
+                    String[] t = ShortcutFile.read(sel.get(0));
+                    mode.finish();
+                    if (t != null) {
+                        File tf = new File(t[1]);
+                        File parent = tf.getParentFile();
+                        if (tf.exists() && parent != null) load(parent, false);
+                        else toast("היעד לא נמצא");
+                    }
+                    return true;
+                }
                 case A_LINK:
                     mode.finish();
                     createShortcutFiles(sel);
@@ -1203,6 +1295,37 @@ public class MainActivity extends Activity {
 
         private class Holder {
             TextView icon, arrow, name, sub;
+            ImageView thumb;
+            String bound;
+        }
+
+        private void showThumb(Holder h, Bitmap b) {
+            h.thumb.setImageBitmap(b);
+            h.thumb.setVisibility(View.VISIBLE);
+            h.icon.setText("");
+        }
+
+        private void bindThumb(final Holder h, final File f) {
+            String m = FileUtils.mime(f);
+            final boolean video = m.startsWith("video/");
+            if (!(m.startsWith("image/") || (video && Build.VERSION.SDK_INT >= 29))) return;
+            final String key = f.getPath() + "|" + f.lastModified();
+            Bitmap cached = thumbCache.get(key);
+            if (cached != null) {
+                showThumb(h, cached);
+                return;
+            }
+            try {
+                thumbPool.execute(() -> {
+                    Bitmap t = makeThumb(f, video);
+                    if (t == null) return;
+                    thumbCache.put(key, t);
+                    runOnUiThread(() -> {
+                        if (f.getPath().equals(h.bound)) showThumb(h, t);
+                    });
+                });
+            } catch (Exception ignored) {
+            }
         }
 
         @Override
@@ -1251,8 +1374,13 @@ public class MainActivity extends Activity {
                 ab.setStroke(1, 0xFF1565C0);
                 h.arrow.setBackground(ab);
                 FrameLayout iconBox = new FrameLayout(MainActivity.this);
+                iconBox.setMinimumHeight(dp(44));
                 iconBox.addView(h.icon, new FrameLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+                h.thumb = new ImageView(MainActivity.this);
+                h.thumb.setScaleType(ImageView.ScaleType.CENTER_CROP);
+                h.thumb.setVisibility(View.GONE);
+                iconBox.addView(h.thumb, new FrameLayout.LayoutParams(dp(40), dp(40), Gravity.CENTER));
                 iconBox.addView(h.arrow, new FrameLayout.LayoutParams(dp(16), dp(16),
                         Gravity.BOTTOM | Gravity.START));
                 row.addView(iconBox, new LinearLayout.LayoutParams(dp(44), ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -1297,6 +1425,10 @@ public class MainActivity extends Activity {
                 sub = f.isDirectory() ? FileUtils.formatDate(f.lastModified())
                         : FileUtils.formatSize(f.length()) + "  \u00B7  " + FileUtils.formatDate(f.lastModified());
             }
+            h.bound = f.getPath();
+            h.thumb.setVisibility(View.GONE);
+            h.thumb.setImageDrawable(null);
+            if (!isLnk && f.isFile()) bindThumb(h, f);
             if (searchMode && f.getParent() != null) sub = f.getParent() + "\n" + sub;
             h.sub.setText(sub);
             return convertView;
