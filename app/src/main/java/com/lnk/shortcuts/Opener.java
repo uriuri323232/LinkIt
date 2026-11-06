@@ -45,6 +45,11 @@ final class Opener {
             case "path": {
                 File f = new File(data);
                 if (!f.exists()) return null;
+                if (ShortcutFile.is(f)) {
+                    String[] t = ShortcutFile.read(f);
+                    if (t == null || "path".equals(t[0]) && ShortcutFile.is(new File(t[1]))) return null;
+                    return target(c, t[0], t[1]);
+                }
                 if (f.isDirectory()) {
                     return new Intent(c, MainActivity.class)
                             .setAction(MainActivity.ACTION_BROWSE)

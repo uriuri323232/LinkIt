@@ -11,6 +11,7 @@ import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.Icon;
 import android.graphics.drawable.StateListDrawable;
 import android.net.Uri;
@@ -62,7 +63,7 @@ public class MainActivity extends Activity {
             M_NEW = 5, M_SORT = 6, M_HIDDEN = 7, M_REFRESH = 8;
     // תפריט בחירה
     private static final int A_COPY = 1, A_CUT = 2, A_DELETE = 3, A_SHARE = 4, A_RENAME = 5,
-            A_ZIP = 6, A_UNZIP = 7, A_FAV = 8, A_HOME = 9, A_PROPS = 10, A_ALL = 11;
+            A_ZIP = 6, A_UNZIP = 7, A_FAV = 8, A_HOME = 9, A_PROPS = 10, A_ALL = 11, A_LINK = 12;
 
     private interface Job {
         String run() throws Exception;
@@ -86,6 +87,7 @@ public class MainActivity extends Activity {
     private final List<File> all = new ArrayList<>();
     private final List<File> shown = new ArrayList<>();
     private final Map<String, Integer> positions = new HashMap<>();
+    private final Map<String, String[]> lnkCache = new HashMap<>();
     private String filter = "";
     private String lastQuery = "";
     private boolean searchMode;
@@ -477,7 +479,11 @@ public class MainActivity extends Activity {
     private void onItemOpen(int pos) {
         if (pos < 0 || pos >= shown.size()) return;
         File f = shown.get(pos);
-        if (f.isDirectory()) {
+        if (ShortcutFile.is(f)) {
+            String[] t = ShortcutFile.read(f);
+            if (t == null) toast("קובץ הקיצור פגום");
+            else openFavorite(new Favorites.Item("", t[0], t[1]));
+        } else if (f.isDirectory()) {
             load(f, false);
         } else {
             openFile(f);
@@ -829,12 +835,55 @@ public class MainActivity extends Activity {
     private void chooseTarget(final String name, final String type, final String data, final Icon icon) {
         new AlertDialog.Builder(this)
                 .setTitle(name)
-                .setItems(new String[]{"\uD83C\uDFE0 הוסף למסך הבית", "\u2B50 הוסף למועדפים באפליקציה"},
+                .setItems(new String[]{"\uD83C\uDFE0 הוסף למסך הבית", "\u2B50 הוסף למועדפים באפליקציה",
+                                "\uD83D\uDCC4 צור קובץ קיצור בתיקייה הנוכחית"},
                         (d, which) -> {
                             if (which == 0) Opener.pin(this, type, data, name, icon);
-                            else addFavorite(name, type, data);
+                            else if (which == 1) addFavorite(name, type, data);
+                            else createShortcutFile(name, type, data);
                         })
                 .show();
+    }
+
+    private void createShortcutFile(String name, String type, String data) {
+        if (cur == null) return;
+        try {
+            ShortcutFile.create(cur, name, type, data);
+            toast("נוצר קובץ קיצור בתיקייה");
+        } catch (Exception e) {
+            toast("יצירת הקיצור נכשלה");
+        }
+        refreshCurrent();
+    }
+
+    /** כמו בווינדוס: נוצר קובץ קיצור בתיקייה הנוכחית; אחר כך גוזרים ומדביקים לכל מקום. */
+    private void createShortcutFiles(List<File> sel) {
+        if (cur == null) return;
+        int n = 0;
+        for (File f : sel) {
+            try {
+                ShortcutFile.create(cur, f.getName(), "path", f.getAbsolutePath());
+                n++;
+            } catch (Exception ignored) {
+            }
+        }
+        toast(n == 0 ? "יצירת הקיצור נכשלה"
+                : "נוצר קיצור דרך. גזור והדבק אותו לכל תיקייה שתרצה");
+        refreshCurrent();
+    }
+
+    private String[] lnkInfo(File f) {
+        String k = f.getPath() + "|" + f.lastModified();
+        if (lnkCache.containsKey(k)) return lnkCache.get(k);
+        String[] r = ShortcutFile.read(f);
+        lnkCache.put(k, r);
+        return r;
+    }
+
+    private String lnkEmoji(String[] t) {
+        if ("url".equals(t[0])) return "\uD83D\uDD17";
+        if ("app".equals(t[0])) return "\uD83D\uDCF1";
+        return FileUtils.icon(new File(t[1]));
     }
 
     private void addFavorite(String name, String type, String data) {
@@ -867,6 +916,7 @@ public class MainActivity extends Activity {
             menu.add(0, A_COPY, 0, "העתק").setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM);
             menu.add(0, A_CUT, 1, "גזור").setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM);
             menu.add(0, A_DELETE, 2, "מחק").setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM);
+            menu.add(0, A_LINK, 3, "\uD83D\uDD17 צור קיצור דרך (קובץ)").setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER);
             menu.add(0, A_HOME, 3, "\uD83C\uDFE0 קיצור למסך הבית").setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER);
             menu.add(0, A_FAV, 4, "\u2B50 הוסף למועדפים").setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER);
             menu.add(0, A_SHARE, 5, "שתף").setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER);
@@ -929,6 +979,10 @@ public class MainActivity extends Activity {
                     }
                     toast("נוסף למועדפים");
                     mode.finish();
+                    return true;
+                case A_LINK:
+                    mode.finish();
+                    createShortcutFiles(sel);
                     return true;
                 case A_HOME:
                     Opener.pinPath(MainActivity.this, sel.get(0));
@@ -1088,6 +1142,10 @@ public class MainActivity extends Activity {
         sb.append("סוג: ").append(f.isDirectory() ? "תיקייה" : FileUtils.mime(f)).append('\n');
         sb.append("שינוי אחרון: ").append(FileUtils.formatDate(f.lastModified())).append('\n');
         sb.append("הרשאות: ").append(f.canRead() ? "קריאה " : "").append(f.canWrite() ? "כתיבה" : "").append('\n');
+        if (ShortcutFile.is(f)) {
+            String[] t = ShortcutFile.read(f);
+            sb.append("יעד הקיצור: ").append(t == null ? "פגום" : t[1]).append('\n');
+        }
         final String head = sb.toString();
         final AlertDialog dlg = new AlertDialog.Builder(this)
                 .setTitle("מאפיינים")
@@ -1144,7 +1202,7 @@ public class MainActivity extends Activity {
     private class FileAdapter extends BaseAdapter {
 
         private class Holder {
-            TextView icon, name, sub;
+            TextView icon, arrow, name, sub;
         }
 
         @Override
@@ -1181,7 +1239,23 @@ public class MainActivity extends Activity {
                 h.icon = new TextView(MainActivity.this);
                 h.icon.setTextSize(26);
                 h.icon.setGravity(Gravity.CENTER);
-                row.addView(h.icon, new LinearLayout.LayoutParams(dp(44), ViewGroup.LayoutParams.WRAP_CONTENT));
+                h.arrow = new TextView(MainActivity.this);
+                h.arrow.setText("\u2197");
+                h.arrow.setTextSize(11);
+                h.arrow.setTypeface(null, android.graphics.Typeface.BOLD);
+                h.arrow.setTextColor(0xFF1565C0);
+                h.arrow.setGravity(Gravity.CENTER);
+                GradientDrawable ab = new GradientDrawable();
+                ab.setShape(GradientDrawable.OVAL);
+                ab.setColor(0xFFFFFFFF);
+                ab.setStroke(1, 0xFF1565C0);
+                h.arrow.setBackground(ab);
+                FrameLayout iconBox = new FrameLayout(MainActivity.this);
+                iconBox.addView(h.icon, new FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+                iconBox.addView(h.arrow, new FrameLayout.LayoutParams(dp(16), dp(16),
+                        Gravity.BOTTOM | Gravity.START));
+                row.addView(iconBox, new LinearLayout.LayoutParams(dp(44), ViewGroup.LayoutParams.WRAP_CONTENT));
 
                 LinearLayout col = new LinearLayout(MainActivity.this);
                 col.setOrientation(LinearLayout.VERTICAL);
@@ -1209,10 +1283,20 @@ public class MainActivity extends Activity {
                 h = (Holder) convertView.getTag();
             }
             File f = shown.get(position);
-            h.icon.setText(FileUtils.icon(f));
-            h.name.setText(f.getName());
-            String sub = f.isDirectory() ? FileUtils.formatDate(f.lastModified())
-                    : FileUtils.formatSize(f.length()) + "  \u00B7  " + FileUtils.formatDate(f.lastModified());
+            boolean isLnk = ShortcutFile.is(f);
+            h.arrow.setVisibility(isLnk ? View.VISIBLE : View.GONE);
+            String sub;
+            if (isLnk) {
+                String[] lnk = lnkInfo(f);
+                h.icon.setText(lnk == null ? "\u2753" : lnkEmoji(lnk));
+                h.name.setText(FileUtils.baseName(f.getName()));
+                sub = "קיצור דרך: " + (lnk == null ? "פגום" : lnk[1]);
+            } else {
+                h.icon.setText(FileUtils.icon(f));
+                h.name.setText(f.getName());
+                sub = f.isDirectory() ? FileUtils.formatDate(f.lastModified())
+                        : FileUtils.formatSize(f.length()) + "  \u00B7  " + FileUtils.formatDate(f.lastModified());
+            }
             if (searchMode && f.getParent() != null) sub = f.getParent() + "\n" + sub;
             h.sub.setText(sub);
             return convertView;
