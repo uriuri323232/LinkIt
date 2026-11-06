@@ -65,7 +65,7 @@ public class MainActivity extends Activity {
 
     // תפריט ראשי
     private static final int M_SEARCH = 1, M_PASTE = 2, M_PLACES = 3, M_FAVS = 4,
-            M_NEW = 5, M_SORT = 6, M_HIDDEN = 7, M_REFRESH = 8, M_PASTELINK = 9;
+            M_NEW = 5, M_SORT = 6, M_HIDDEN = 7, M_REFRESH = 8, M_PASTELINK = 9, M_EXT = 10;
     // תפריט בחירה
     private static final int A_COPY = 1, A_CUT = 2, A_DELETE = 3, A_SHARE = 4, A_RENAME = 5,
             A_ZIP = 6, A_UNZIP = 7, A_FAV = 8, A_HOME = 9, A_PROPS = 10, A_ALL = 11, A_LINK = 12, A_OPENWITH = 13, A_TARGET = 14;
@@ -586,6 +586,8 @@ public class MainActivity extends Activity {
         menu.add(0, M_SORT, 5, "מיון").setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER);
         menu.add(0, M_HIDDEN, 6, "הצג קבצים נסתרים")
                 .setCheckable(true).setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER);
+        menu.add(0, M_EXT, 6, "קיצורי תיקייה נפתחים במנהל הקבצים שלי")
+                .setCheckable(true).setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER);
         menu.add(0, M_REFRESH, 7, "רענן").setShowAsAction(MenuItem.SHOW_AS_ACTION_NEVER);
         return true;
     }
@@ -601,6 +603,8 @@ public class MainActivity extends Activity {
         if (pl != null) pl.setVisible(!clip.isEmpty());
         MenuItem hidden = menu.findItem(M_HIDDEN);
         if (hidden != null) hidden.setChecked(showHidden);
+        MenuItem ext = menu.findItem(M_EXT);
+        if (ext != null) ext.setChecked(prefs.getBoolean("extFolders", true));
         return super.onPrepareOptionsMenu(menu);
     }
 
@@ -630,6 +634,13 @@ public class MainActivity extends Activity {
                 prefs.edit().putBoolean("showHidden", showHidden).apply();
                 refreshCurrent();
                 return true;
+            case M_EXT: {
+                boolean now = !prefs.getBoolean("extFolders", true);
+                prefs.edit().putBoolean("extFolders", now).apply();
+                toast(now ? "קיצורי תיקייה ייפתחו במנהל הקבצים שלך"
+                        : "קיצורי תיקייה ייפתחו בתוך LinkIt");
+                return true;
+            }
             case M_REFRESH:
                 refreshCurrent();
                 return true;

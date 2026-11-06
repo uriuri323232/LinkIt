@@ -12,6 +12,7 @@ import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.Icon;
 import android.net.Uri;
+import android.os.Environment;
 import android.provider.DocumentsContract;
 import android.widget.Toast;
 
@@ -37,7 +38,43 @@ final class Opener {
     }
 
     /** ה-Intent האמיתי של היעד, או null אם לא נמצא. */
+    /** פתיחה בתוך LinkIt (תיקיות נפתחות במנהל הקבצים של LinkIt). */
     static Intent target(Context c, String type, String data) {
+        return target(c, type, data, false);
+    }
+
+    /** מזהה מסמך של ספק האחסון המובנה (primary:Download וכו') או null. */
+    static String docId(File f) {
+        String p = f.getAbsolutePath();
+        String prim = Environment.getExternalStorageDirectory().getAbsolutePath();
+        if (p.equals(prim) || p.startsWith(prim + "/")) {
+            return "primary:" + p.substring(prim.length()).replaceFirst("^/", "");
+        }
+        if (p.startsWith("/storage/")) {
+            String rest = p.substring(9);
+            int i = rest.indexOf('/');
+            String vol = i < 0 ? rest : rest.substring(0, i);
+            String rel = i < 0 ? "" : rest.substring(i + 1);
+            if (vol.equals("emulated") || vol.equals("self") || vol.isEmpty()) return null;
+            return vol + ":" + rel;
+        }
+        return null;
+    }
+
+    /** Intent שפותח תיקייה במנהל הקבצים שבו המשתמש משתמש (ברירת המחדל של המערכת). */
+    static Intent externalFolderIntent(File dir) {
+        String id = docId(dir);
+        if (id == null) return null;
+        Uri u = DocumentsContract.buildDocumentUri("com.android.externalstorage.documents", id);
+        Intent i = new Intent(Intent.ACTION_VIEW);
+        i.setDataAndType(u, DocumentsContract.Document.MIME_TYPE_DIR);
+        return i;
+    }
+
+    /**
+     * @param external true = תיקיות נפתחות במנהל הקבצים החיצוני של המשתמש, false = בתוך LinkIt.
+     */
+    static Intent target(Context c, String type, String data, boolean external) {
         if (type == null || data == null) return null;
         switch (type) {
             case "url":
@@ -48,9 +85,13 @@ final class Opener {
                 if (ShortcutFile.is(f)) {
                     String[] t = ShortcutFile.read(f);
                     if (t == null || "path".equals(t[0]) && ShortcutFile.is(new File(t[1]))) return null;
-                    return target(c, t[0], t[1]);
+                    return target(c, t[0], t[1], external);
                 }
                 if (f.isDirectory()) {
+                    if (external) {
+                        Intent ext = externalFolderIntent(f);
+                        if (ext != null) return ext;
+                    }
                     return new Intent(c, MainActivity.class)
                             .setAction(MainActivity.ACTION_BROWSE)
                             .putExtra("path", f.getAbsolutePath());
