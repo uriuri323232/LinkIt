@@ -132,6 +132,10 @@ public class MainActivity extends Activity {
         emptyView.addView(e1);
         emptyView.addView(e2);
         emptyView.addView(e3);
+        TextView e4 = Ui.label(this, "פותח על ידי יהודי לא פשוט @מתמחים טופ", 12, Ui.sub(this), false);
+        e4.setGravity(Gravity.CENTER);
+        e4.setPadding(0, Ui.dp(this, 24), 0, 0);
+        emptyView.addView(e4);
         holder.addView(emptyView, new FrameLayout.LayoutParams(Ui.MATCH, Ui.MATCH));
         col.addView(holder, new LinearLayout.LayoutParams(Ui.MATCH, 0, 1f));
 
@@ -438,7 +442,7 @@ public class MainActivity extends Activity {
     }
 
     private void showMenu() {
-        String[] labels = {"↕️  מיון הרשימה", "📤  ייצוא גיבוי", "📥  ייבוא גיבוי", "📦  ייצוא כל הקיצורים כקבצי .linkit לתיקייה", "📂  מנהל הקבצים", "📍  מנהל הקבצים המועדף שלי", "💡  איך זה עובד"};
+        String[] labels = {"↕️  מיון הרשימה", "📤  ייצוא גיבוי", "📥  ייבוא גיבוי", "📦  ייצוא כל הקיצורים כקבצי .linkit לתיקייה", "📂  מנהל הקבצים", "📍  מנהל הקבצים המועדף שלי", "💡  איך זה עובד", "📋  צור קיצור מהלוח", "ℹ️  אודות"};
         AlertDialog d = new AlertDialog.Builder(this)
                 .setItems(labels, (dlg, which) -> {
                     switch (which) {
@@ -474,8 +478,51 @@ public class MainActivity extends Activity {
                         case 6:
                             showHelp();
                             break;
+                        case 7:
+                            fromClipboard();
+                            break;
+                        case 8:
+                            showAbout();
+                            break;
                     }
                 })
+                .create();
+        d.show();
+        Ui.rtl(d.getWindow().getDecorView());
+    }
+
+    private void fromClipboard() {
+        String text = null;
+        try {
+            android.content.ClipboardManager cm = (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+            if (cm != null && cm.hasPrimaryClip() && cm.getPrimaryClip().getItemCount() > 0) {
+                CharSequence cs = cm.getPrimaryClip().getItemAt(0).coerceToText(this);
+                if (cs != null) text = cs.toString().trim();
+            }
+        } catch (Exception ignored) {
+        }
+        if (text == null || text.isEmpty()) {
+            Ui.toast(this, "הלוח ריק");
+            return;
+        }
+        Intent i = new Intent(this, EditorActivity.class);
+        i.setAction(Intent.ACTION_SEND);
+        i.setType("text/plain");
+        i.putExtra(Intent.EXTRA_TEXT, text);
+        startActivity(i);
+    }
+
+    private void showAbout() {
+        String ver = "";
+        try {
+            ver = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
+        } catch (Exception ignored) {
+        }
+        String msg = "LinkIt " + ver + "\n\nקיצורי דרך ומנהל קבצים, ללא הרשאת אינטרנט.\n\nפותח על ידי יהודי לא פשוט @מתמחים טופ";
+        AlertDialog d = new AlertDialog.Builder(this)
+                .setTitle("אודות")
+                .setMessage(msg)
+                .setPositiveButton("סגור", null)
                 .create();
         d.show();
         Ui.rtl(d.getWindow().getDecorView());
@@ -511,7 +558,8 @@ public class MainActivity extends Activity {
                 + "• מנהל הקבצים (📂): דפדוף, העתקה, העברה, מחיקה ויצירת קיצורים מכל קובץ או תיקייה.\n\n"
                 + "• בקיצור תיקייה אפשר לבחור באיזה מנהל קבצים לפתוח. במצב \"אוטומטי\", קובץ קיצור שנפתח מתוך מנהל קבצים יפתח את התיקייה באותו מנהל, בלי לעבור לאחר.\n\n"
                 + "• קיצורי קובץ ותיקייה נקראים בשם היעד עצמו, ואפשר להציג עליהם חץ קיצור כמו בווינדוס.\n\n"
-                + "• קבצי .linkit: קיצור שנשמר כקובץ נפתח מכל מנהל קבצים. הקיצורים שלך מופיעים גם כאחסון \"LinkIt\" בתוך מנהלי קבצים שתומכים בספקי אחסון.";
+                + "• קבצי .linkit: קיצור שנשמר כקובץ נפתח מכל מנהל קבצים. הקיצורים שלך מופיעים גם כאחסון \"LinkIt\" בתוך מנהלי קבצים שתומכים בספקי אחסון.\n\n"
+                + "פותח על ידי יהודי לא פשוט @מתמחים טופ";
         AlertDialog d = new AlertDialog.Builder(this)
                 .setTitle("איך זה עובד")
                 .setMessage(msg)
