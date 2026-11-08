@@ -72,18 +72,15 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
         </activity>
 
-        <!-- מנהל הקבצים המובנה. מופיע גם כאייקון נפרד, וגם ברשימת "פתח באמצעות" של תיקיות -->
+        <!-- מנהל הקבצים המובנה. אין לו אייקון משלו במסך הבית (כדי שהאפליקציה לא תופיע פעמיים); נפתח מכפתור 📂 או מלחיצה ארוכה על האייקון -->
         <activity
             android:name=".BrowserActivity"
             android:exported="true"
             android:icon="@mipmap/ic_files"
             android:label="@string/files_name">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
