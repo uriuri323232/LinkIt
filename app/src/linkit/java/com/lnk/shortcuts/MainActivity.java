@@ -79,16 +79,20 @@ public class MainActivity extends Activity {
         head.addView(titles, new LinearLayout.LayoutParams(0, Ui.WRAP, 1f));
         TextView menu = Ui.label(this, "⋮", 28, Ui.text(this), true);
         menu.setGravity(Gravity.CENTER);
-        menu.setPadding(Ui.dp(this, 14), Ui.dp(this, 6), Ui.dp(this, 14), Ui.dp(this, 6));
+        menu.setMinWidth(Ui.dp(this, 44));
+        menu.setMinHeight(Ui.dp(this, 44));
+        menu.setBackground(Ui.press(this, Ui.rect(this, Ui.tint(this), 22)));
         menu.setClickable(true);
         menu.setOnClickListener(v -> showMenu());
         TextView files = Ui.label(this, "📂", 22, Ui.text(this), false);
         files.setGravity(Gravity.CENTER);
-        files.setPadding(Ui.dp(this, 10), Ui.dp(this, 6), Ui.dp(this, 10), Ui.dp(this, 6));
+        files.setMinWidth(Ui.dp(this, 44));
+        files.setMinHeight(Ui.dp(this, 44));
+        files.setBackground(Ui.press(this, Ui.rect(this, Ui.tint(this), 22)));
         files.setClickable(true);
         files.setOnClickListener(v -> startActivity(new Intent(this, BrowserActivity.class)));
-        head.addView(files);
-        head.addView(menu);
+        head.addView(files, Ui.lp(this, Ui.WRAP, Ui.WRAP, 4, 0, 4, 0));
+        head.addView(menu, Ui.lp(this, Ui.WRAP, Ui.WRAP, 4, 0, 4, 0));
         col.addView(head);
 
         // חיפוש
@@ -114,7 +118,7 @@ public class MainActivity extends Activity {
         list.setDivider(null);
         list.setDividerHeight(0);
         list.setClipToPadding(false);
-        list.setPadding(Ui.dp(this, 16), Ui.dp(this, 4), Ui.dp(this, 16), Ui.dp(this, 100));
+        list.setPadding(Ui.dp(this, 16), Ui.dp(this, 4), Ui.dp(this, 16), Ui.dp(this, 90));
         list.setSelector(new android.graphics.drawable.ColorDrawable(0));
         holder.addView(list, new FrameLayout.LayoutParams(Ui.MATCH, Ui.MATCH));
 
@@ -134,9 +138,15 @@ public class MainActivity extends Activity {
         emptyView.addView(e3);
         TextView first = Ui.button(this, "＋  צור קיצור ראשון", true, v -> showTypePicker());
         emptyView.addView(first, Ui.lp(this, Ui.WRAP, Ui.WRAP, 0, 20, 0, 0));
-        emptyView.addView(Ui.creditCard(this), Ui.lp(this, Ui.WRAP, Ui.WRAP, 0, 20, 0, 0));
         holder.addView(emptyView, new FrameLayout.LayoutParams(Ui.MATCH, Ui.MATCH));
         col.addView(holder, new LinearLayout.LayoutParams(Ui.MATCH, 0, 1f));
+
+        // קרדיט קטן וקבוע בתחתית המסך
+        TextView credit = Ui.label(this, "פותח על ידי יהודי לא פשוט  ·  @מתמחים טופ", 11, Ui.sub(this), false);
+        credit.setGravity(Gravity.CENTER);
+        credit.setAlpha(0.8f);
+        credit.setPadding(Ui.dp(this, 16), Ui.dp(this, 6), Ui.dp(this, 16), Ui.dp(this, 8));
+        col.addView(credit, new LinearLayout.LayoutParams(Ui.MATCH, Ui.WRAP));
 
         adapter = new BaseAdapter() {
             @Override public int getCount() { return shown.size(); }
@@ -157,7 +167,6 @@ public class MainActivity extends Activity {
                 return cv;
             }
         };
-        list.addFooterView(Ui.creditCard(this), null, false);
         list.setAdapter(adapter);
         list.setOnItemClickListener((p, v, pos, id) -> {
             if (pos >= 0 && pos < shown.size()) showActions(shown.get(pos));
@@ -178,7 +187,7 @@ public class MainActivity extends Activity {
         fab.setOnClickListener(v -> showTypePicker());
         FrameLayout.LayoutParams flp = new FrameLayout.LayoutParams(Ui.WRAP, Ui.WRAP,
                 Gravity.BOTTOM | Gravity.END);
-        flp.setMargins(Ui.dp(this, 20), 0, Ui.dp(this, 20), Ui.dp(this, 24));
+        flp.setMargins(Ui.dp(this, 20), 0, Ui.dp(this, 20), Ui.dp(this, 44));
         root.addView(fab, flp);
 
         setContentView(root);
@@ -300,7 +309,7 @@ public class MainActivity extends Activity {
             card.setGravity(Gravity.CENTER_VERTICAL);
             card.setPadding(Ui.dp(MainActivity.this, 12), Ui.dp(MainActivity.this, 12),
                     Ui.dp(MainActivity.this, 12), Ui.dp(MainActivity.this, 12));
-            card.setBackground(Ui.press(MainActivity.this, Ui.rect(MainActivity.this, Ui.surface(MainActivity.this), 18)));
+            card.setBackground(Ui.press(MainActivity.this, Ui.rectStroke(MainActivity.this, Ui.surface(MainActivity.this), Ui.outline(MainActivity.this), 18)));
             card.setDuplicateParentStateEnabled(true);
 
             icon = new ImageView(MainActivity.this);
