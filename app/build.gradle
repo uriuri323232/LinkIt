@@ -10,8 +10,8 @@ android {
         applicationId "com.lnk.shortcuts"
         minSdk 26
         targetSdk 34
-        versionCode 8
-        versionName "4.3"
+        versionCode 9
+        versionName "4.4"
     }
 
     // כל קוד האפליקציה נמצא בתיקייה src/linkit.

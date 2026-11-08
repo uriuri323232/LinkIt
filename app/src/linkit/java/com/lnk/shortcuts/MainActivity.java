@@ -132,10 +132,9 @@ public class MainActivity extends Activity {
         emptyView.addView(e1);
         emptyView.addView(e2);
         emptyView.addView(e3);
-        TextView e4 = Ui.label(this, "פותח על ידי יהודי לא פשוט @מתמחים טופ", 12, Ui.sub(this), false);
-        e4.setGravity(Gravity.CENTER);
-        e4.setPadding(0, Ui.dp(this, 24), 0, 0);
-        emptyView.addView(e4);
+        TextView first = Ui.button(this, "＋  צור קיצור ראשון", true, v -> showTypePicker());
+        emptyView.addView(first, Ui.lp(this, Ui.WRAP, Ui.WRAP, 0, 20, 0, 0));
+        emptyView.addView(Ui.creditCard(this), Ui.lp(this, Ui.WRAP, Ui.WRAP, 0, 20, 0, 0));
         holder.addView(emptyView, new FrameLayout.LayoutParams(Ui.MATCH, Ui.MATCH));
         col.addView(holder, new LinearLayout.LayoutParams(Ui.MATCH, 0, 1f));
 
@@ -158,8 +157,16 @@ public class MainActivity extends Activity {
                 return cv;
             }
         };
+        list.addFooterView(Ui.creditCard(this), null, false);
         list.setAdapter(adapter);
-        list.setOnItemClickListener((p, v, pos, id) -> showActions(shown.get(pos)));
+        list.setOnItemClickListener((p, v, pos, id) -> {
+            if (pos >= 0 && pos < shown.size()) showActions(shown.get(pos));
+        });
+        list.setOnItemLongClickListener((p, v, pos, id) -> {
+            if (pos < 0 || pos >= shown.size()) return false;
+            Launcher.run(this, shown.get(pos), false);
+            return true;
+        });
 
         // כפתור יצירה
         TextView fab = Ui.label(this, "＋  חדש", 17, Ui.onPrimary(this), true);
@@ -518,10 +525,19 @@ public class MainActivity extends Activity {
             ver = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
         } catch (Exception ignored) {
         }
-        String msg = "LinkIt " + ver + "\n\nקיצורי דרך ומנהל קבצים, ללא הרשאת אינטרנט.\n\nפותח על ידי יהודי לא פשוט @מתמחים טופ";
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(Ui.dp(this, 24), Ui.dp(this, 20), Ui.dp(this, 24), Ui.dp(this, 8));
+        TextView t1 = Ui.label(this, "LinkIt", 26, Ui.text(this), true);
+        TextView t2 = Ui.label(this, "גרסה " + ver, 13, Ui.sub(this), false);
+        TextView t3 = Ui.label(this, "קיצורי דרך ומנהל קבצים. ללא הרשאת אינטרנט, הכול נשמר במכשיר בלבד.", 14, Ui.text(this), false);
+        t3.setPadding(0, Ui.dp(this, 12), 0, 0);
+        box.addView(t1);
+        box.addView(t2);
+        box.addView(t3);
+        box.addView(Ui.creditCard(this));
         AlertDialog d = new AlertDialog.Builder(this)
-                .setTitle("אודות")
-                .setMessage(msg)
+                .setView(box)
                 .setPositiveButton("סגור", null)
                 .create();
         d.show();
@@ -548,6 +564,7 @@ public class MainActivity extends Activity {
 
     private void showHelp() {
         String msg = "• לחץ \"＋ חדש\", בחר סוג וצור קיצור. הוא נשמר כאן וגם מתווסף למסך הבית.\n\n"
+                + "• לחיצה ארוכה על קיצור ברשימה מפעילה אותו מיד.\n\n"
                 + "• לחיצה על קיצור ברשימה: הוספה מחדש למסך הבית, הפעלה, עריכה, שכפול ומחיקה.\n\n"
                 + "• עריכת קיצור (שם, אייקון, יעד) מעדכנת אוטומטית גם את הקיצור שכבר נמצא במסך הבית.\n\n"
                 + "• \"תפריט\" הוא קיצור אחד שפותח חלון עם כמה קיצורים לבחירה.\n\n"

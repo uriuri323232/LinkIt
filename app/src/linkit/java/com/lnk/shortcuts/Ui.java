@@ -149,4 +149,28 @@ final class Ui {
             @Override public void afterTextChanged(Editable s) { r.run(); }
         });
     }
+
+    /** כרטיס קרדיט קבוע. */
+    static View creditCard(Context c) {
+        LinearLayout box = new LinearLayout(c);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setGravity(Gravity.CENTER_HORIZONTAL);
+        box.setPadding(dp(c, 20), dp(c, 16), dp(c, 20), dp(c, 16));
+        box.setBackground(rectStroke(c, tint(c), outline(c), 18));
+        TextView a = label(c, "פותח על ידי", 12, sub(c), false);
+        a.setGravity(Gravity.CENTER);
+        TextView b = label(c, "יהודי לא פשוט", 18, text(c), true);
+        b.setGravity(Gravity.CENTER);
+        TextView d = label(c, "@מתמחים טופ", 15, primary(c), true);
+        d.setGravity(Gravity.CENTER);
+        d.setTextDirection(View.TEXT_DIRECTION_RTL);
+        box.addView(a);
+        box.addView(b);
+        box.addView(d);
+        LinearLayout wrap = new LinearLayout(c);
+        wrap.setOrientation(LinearLayout.VERTICAL);
+        wrap.setPadding(0, dp(c, 12), 0, dp(c, 8));
+        wrap.addView(box, new LinearLayout.LayoutParams(MATCH, WRAP));
+        return wrap;
+    }
 }
