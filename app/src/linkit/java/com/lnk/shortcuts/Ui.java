@@ -27,15 +27,15 @@ final class Ui {
                 == Configuration.UI_MODE_NIGHT_YES;
     }
 
-    static int bg(Context c) { return night(c) ? 0xFF0F1115 : 0xFFF6F7FB; }
+    static int bg(Context c) { return night(c) ? 0xFF0D0F14 : 0xFFF3F5FA; }
     static int surface(Context c) { return night(c) ? 0xFF1A1D24 : 0xFFFFFFFF; }
     static int fieldBg(Context c) { return night(c) ? 0xFF232731 : 0xFFECEEF5; }
     static int text(Context c) { return night(c) ? 0xFFECEFF4 : 0xFF1B1F2A; }
     static int sub(Context c) { return night(c) ? 0xFF9AA3B2 : 0xFF6B7280; }
     static int primary(Context c) { return night(c) ? 0xFF8CA7FF : 0xFF3B5BDB; }
     static int onPrimary(Context c) { return night(c) ? 0xFF0B1020 : 0xFFFFFFFF; }
-    static int outline(Context c) { return night(c) ? 0xFF2C313D : 0xFFE1E4EC; }
-    static int tint(Context c) { return night(c) ? 0xFF28314D : 0xFFE3E9FF; }
+    static int outline(Context c) { return night(c) ? 0xFF272C37 : 0xFFE4E8F0; }
+    static int tint(Context c) { return night(c) ? 0xFF252E4A : 0xFFE6ECFF; }
 
     static int dp(Context c, float v) {
         return Math.round(v * c.getResources().getDisplayMetrics().density);
@@ -70,17 +70,20 @@ final class Ui {
 
     static TextView section(Context c, String s) {
         TextView t = label(c, s, 13, sub(c), true);
-        t.setPadding(dp(c, 4), dp(c, 18), dp(c, 4), dp(c, 6));
+        t.setLetterSpacing(0.04f);
+        t.setPadding(dp(c, 6), dp(c, 22), dp(c, 6), dp(c, 8));
         return t;
     }
 
     static TextView button(Context c, String s, boolean primary, View.OnClickListener l) {
-        TextView t = label(c, s, 15, primary ? onPrimary(c) : text(c), true);
+        TextView t = label(c, s, 16, primary ? onPrimary(c) : text(c), true);
         t.setGravity(Gravity.CENTER);
-        t.setPadding(dp(c, 18), dp(c, 14), dp(c, 18), dp(c, 14));
+        t.setMinHeight(dp(c, 52));
+        t.setPadding(dp(c, 20), dp(c, 14), dp(c, 20), dp(c, 14));
+        if (primary) t.setElevation(dp(c, 2));
         t.setBackground(press(c, primary
-                ? rect(c, primary(c), 14)
-                : rectStroke(c, surface(c), outline(c), 14)));
+                ? rect(c, primary(c), 18)
+                : rectStroke(c, surface(c), outline(c), 18)));
         t.setClickable(true);
         t.setOnClickListener(l);
         return t;
@@ -89,10 +92,11 @@ final class Ui {
     static TextView chip(Context c, String s, boolean selected, View.OnClickListener l) {
         TextView t = label(c, s, 13, selected ? onPrimary(c) : text(c), true);
         t.setGravity(Gravity.CENTER);
-        t.setPadding(dp(c, 14), dp(c, 8), dp(c, 14), dp(c, 8));
+        t.setMinHeight(dp(c, 40));
+        t.setPadding(dp(c, 16), dp(c, 9), dp(c, 16), dp(c, 9));
         t.setBackground(press(c, selected
-                ? rect(c, primary(c), 20)
-                : rectStroke(c, surface(c), outline(c), 20)));
+                ? rect(c, primary(c), 22)
+                : rectStroke(c, surface(c), outline(c), 22)));
         t.setClickable(true);
         t.setOnClickListener(l);
         return t;
@@ -105,8 +109,9 @@ final class Ui {
         e.setTextSize(16);
         e.setTextColor(text(c));
         e.setHintTextColor(sub(c));
-        e.setBackground(rect(c, fieldBg(c), 12));
-        e.setPadding(dp(c, 14), dp(c, 13), dp(c, 14), dp(c, 13));
+        e.setBackground(rect(c, fieldBg(c), 16));
+        e.setMinHeight(dp(c, 52));
+        e.setPadding(dp(c, 16), dp(c, 14), dp(c, 16), dp(c, 14));
         e.setInputType(multi ? (type | InputType.TYPE_TEXT_FLAG_MULTI_LINE) : type);
         if (multi) {
             e.setMinLines(3);

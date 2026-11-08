@@ -53,6 +53,6 @@ final class LinkitFile {
     static String fileName(Item it) {
         String n = targetName(it).replaceAll("[\\\\/:*?\"<>|\\r\\n]", "_").trim();
         if (n.isEmpty()) n = "shortcut";
-        return n + ".linkit";
+        return "\uD83D\uDD17 " + n + ".linkit";
     }
 }

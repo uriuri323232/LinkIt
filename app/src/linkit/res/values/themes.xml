@@ -2,6 +2,8 @@
 <resources>
     <style name="LinkItTheme" parent="@android:style/Theme.DeviceDefault.Light.NoActionBar">
         <item name="android:windowBackground">@color/bg</item>
+        <item name="android:statusBarColor">@color/bg</item>
+        <item name="android:windowLightStatusBar">true</item>
     </style>
 
     <style name="LinkItLaunchTheme" parent="LinkItTheme">
