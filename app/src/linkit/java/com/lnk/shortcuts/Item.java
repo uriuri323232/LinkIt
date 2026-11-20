@@ -20,7 +20,7 @@ final class Item {
     long lastUsed = 0;
     int uses = 0;
     /** חץ קיצור על האייקון (כמו בווינדוס). */
-    boolean arrow = false;
+    boolean arrow = true;
 
     static String newId() {
         return UUID.randomUUID().toString().replace("-", "").substring(0, 12);
@@ -61,7 +61,7 @@ final class Item {
         it.created = o.optLong("created", it.created);
         it.lastUsed = o.optLong("lastUsed", 0);
         it.uses = o.optInt("uses", 0);
-        it.arrow = o.optBoolean("arrow", false);
+        it.arrow = o.optBoolean("arrow", true);
         return it;
     }
 }

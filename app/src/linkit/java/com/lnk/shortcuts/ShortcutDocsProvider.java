@@ -1,6 +1,9 @@
 package com.lnk.shortcuts;
 
+import android.content.res.AssetFileDescriptor;
 import android.database.Cursor;
+import android.graphics.Bitmap;
+import android.graphics.Point;
 import android.database.MatrixCursor;
 import android.os.CancellationSignal;
 import android.os.ParcelFileDescriptor;
@@ -26,11 +29,16 @@ public class ShortcutDocsProvider extends DocumentsProvider {
             Root.COLUMN_ICON, Root.COLUMN_TITLE, Root.COLUMN_SUMMARY, Root.COLUMN_DOCUMENT_ID};
     private static final String[] DOC_COLS = {Document.COLUMN_DOCUMENT_ID, Document.COLUMN_MIME_TYPE,
             Document.COLUMN_DISPLAY_NAME, Document.COLUMN_LAST_MODIFIED, Document.COLUMN_FLAGS,
-            Document.COLUMN_SIZE};
+            Document.COLUMN_SIZE, Document.COLUMN_ICON};
 
     @Override
     public boolean onCreate() {
         return true;
+    }
+
+    /** מוסיף ערך רק אם הלקוח ביקש את העמודה (מונע קריסה כשמנהל קבצים מבקש פחות עמודות). */
+    private static void put(MatrixCursor c, MatrixCursor.RowBuilder r, String col, Object v) {
+        if (c.getColumnIndex(col) >= 0) r.add(col, v);
     }
 
     private static String[] cols(String[] projection, String[] def) {
@@ -59,33 +67,34 @@ public class ShortcutDocsProvider extends DocumentsProvider {
     public Cursor queryRoots(String[] projection) {
         MatrixCursor c = new MatrixCursor(cols(projection, ROOT_COLS));
         MatrixCursor.RowBuilder r = c.newRow();
-        r.add(Root.COLUMN_ROOT_ID, "linkit");
-        r.add(Root.COLUMN_FLAGS, Root.FLAG_LOCAL_ONLY | Root.FLAG_SUPPORTS_IS_CHILD);
-        r.add(Root.COLUMN_ICON, R.mipmap.ic_launcher);
-        r.add(Root.COLUMN_TITLE, "LinkIt - קיצורים");
-        r.add(Root.COLUMN_SUMMARY, "הקיצורים שלך כקבצים");
-        r.add(Root.COLUMN_DOCUMENT_ID, ROOT_DOC);
+        put(c, r, Root.COLUMN_ROOT_ID, "linkit");
+        put(c, r, Root.COLUMN_FLAGS, Root.FLAG_LOCAL_ONLY | Root.FLAG_SUPPORTS_IS_CHILD);
+        put(c, r, Root.COLUMN_ICON, R.mipmap.ic_launcher);
+        put(c, r, Root.COLUMN_TITLE, "LinkIt - קיצורים");
+        put(c, r, Root.COLUMN_SUMMARY, "הקיצורים שלך כקבצים");
+        put(c, r, Root.COLUMN_DOCUMENT_ID, ROOT_DOC);
         return c;
     }
 
     private void addRoot(MatrixCursor c) {
         MatrixCursor.RowBuilder r = c.newRow();
-        r.add(Document.COLUMN_DOCUMENT_ID, ROOT_DOC);
-        r.add(Document.COLUMN_MIME_TYPE, Document.MIME_TYPE_DIR);
-        r.add(Document.COLUMN_DISPLAY_NAME, "LinkIt");
-        r.add(Document.COLUMN_LAST_MODIFIED, System.currentTimeMillis());
-        r.add(Document.COLUMN_FLAGS, 0);
-        r.add(Document.COLUMN_SIZE, 0);
+        put(c, r, Document.COLUMN_DOCUMENT_ID, ROOT_DOC);
+        put(c, r, Document.COLUMN_MIME_TYPE, Document.MIME_TYPE_DIR);
+        put(c, r, Document.COLUMN_DISPLAY_NAME, "LinkIt");
+        put(c, r, Document.COLUMN_LAST_MODIFIED, System.currentTimeMillis());
+        put(c, r, Document.COLUMN_FLAGS, 0);
+        put(c, r, Document.COLUMN_SIZE, 0);
     }
 
     private void addItem(MatrixCursor c, Item it, String name) {
         MatrixCursor.RowBuilder r = c.newRow();
-        r.add(Document.COLUMN_DOCUMENT_ID, "i:" + it.id);
-        r.add(Document.COLUMN_MIME_TYPE, LinkitFile.MIME);
-        r.add(Document.COLUMN_DISPLAY_NAME, name);
-        r.add(Document.COLUMN_LAST_MODIFIED, Math.max(it.lastUsed, it.created));
-        r.add(Document.COLUMN_FLAGS, 0);
-        r.add(Document.COLUMN_SIZE, (long) LinkitFile.write(it).getBytes(StandardCharsets.UTF_8).length);
+        put(c, r, Document.COLUMN_DOCUMENT_ID, "i:" + it.id);
+        put(c, r, Document.COLUMN_MIME_TYPE, LinkitFile.MIME);
+        put(c, r, Document.COLUMN_DISPLAY_NAME, name);
+        put(c, r, Document.COLUMN_LAST_MODIFIED, Math.max(it.lastUsed, it.created));
+        put(c, r, Document.COLUMN_FLAGS, Document.FLAG_SUPPORTS_THUMBNAIL);
+        put(c, r, Document.COLUMN_ICON, R.drawable.ic_shortcut_badge);
+        put(c, r, Document.COLUMN_SIZE, (long) LinkitFile.write(it).getBytes(StandardCharsets.UTF_8).length);
     }
 
     @Override
@@ -132,6 +141,31 @@ public class ShortcutDocsProvider extends DocumentsProvider {
                 } catch (Exception e) {
                     throw new FileNotFoundException(e.getMessage());
                 }
+            }
+        }
+        throw new FileNotFoundException(documentId);
+    }
+
+    /** תמונה ממוזערת: אייקון הקיצור עם סמל קיצור דרך, כך שגם בתוך מנהלי קבצים אחרים רואים שזה קיצור. */
+    @Override
+    public AssetFileDescriptor openDocumentThumbnail(String documentId, Point sizeHint, CancellationSignal signal)
+            throws FileNotFoundException {
+        for (Item it : Store.all(getContext())) {
+            if (!("i:" + it.id).equals(documentId)) continue;
+            try {
+                int px = sizeHint == null ? 192 : Math.max(96, Math.min(sizeHint.x, 384));
+                Bitmap b = IconMaker.thumbnail(getContext(), it, px);
+                File dir = new File(getContext().getCacheDir(), "docs");
+                if (!dir.exists()) dir.mkdirs();
+                File f = new File(dir, "t_" + it.id + ".png");
+                try (java.io.FileOutputStream fo = new java.io.FileOutputStream(f)) {
+                    b.compress(Bitmap.CompressFormat.PNG, 100, fo);
+                }
+                b.recycle();
+                return new AssetFileDescriptor(ParcelFileDescriptor.open(f, ParcelFileDescriptor.MODE_READ_ONLY),
+                        0, AssetFileDescriptor.UNKNOWN_LENGTH);
+            } catch (Exception e) {
+                throw new FileNotFoundException(e.getMessage());
             }
         }
         throw new FileNotFoundException(documentId);

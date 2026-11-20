@@ -185,6 +185,21 @@ final class IconMaker {
         return b;
     }
 
+    /** תמונה ממוזערת לאפליקציות אחרות (מנהלי קבצים): תמיד עם סמל קיצור הדרך, בריבוע מעוגל. */
+    static Bitmap thumbnail(Context c, Item it, int px) {
+        Bitmap full = baseAdaptive(c, it);
+        drawArrow(new Canvas(full));
+        Bitmap crop = Bitmap.createBitmap(full, VIS_START, VIS_START, VIS_END - VIS_START, VIS_END - VIS_START);
+        Bitmap out = Bitmap.createBitmap(px, px, Bitmap.Config.ARGB_8888);
+        Paint p = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+        p.setShader(new BitmapShader(Bitmap.createScaledBitmap(crop, px, px, true), Shader.TileMode.CLAMP, Shader.TileMode.CLAMP));
+        float r = px * 0.22f;
+        new Canvas(out).drawRoundRect(new RectF(0, 0, px, px), r, r, p);
+        full.recycle();
+        crop.recycle();
+        return out;
+    }
+
     /** תצוגה מקדימה בתוך האפליקציה: ריבוע מעוגל. */
     static Bitmap preview(Context c, Item it, int px) {
         String key = it.id + "|" + it.type + "|" + it.iconKind + "|" + it.color + "|" + it.glyph

@@ -10,8 +10,8 @@ android {
         applicationId "com.lnk.shortcuts"
         minSdk 26
         targetSdk 34
-        versionCode 10
-        versionName "4.5"
+        versionCode 11
+        versionName "4.6"
     }
 
     // כל קוד האפליקציה נמצא בתיקייה src/linkit.
@@ -25,8 +25,16 @@ android {
     }
 
     buildTypes {
+        // R8 + כיווץ משאבים גם ב-debug: ה-APK שנבנה ב-GitHub קטן וקל יותר
+        debug {
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt')
+        }
         release {
-            minifyEnabled false
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt')
         }
     }
 

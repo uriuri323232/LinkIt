@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- סמל "קיצור דרך" קטן ושקט במשקל: ריבוע כחול עם חץ לבן. מוצג באפליקציות אחרות (מנהלי קבצים, "פתח באמצעות"). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp" android:height="48dp"
+    android:viewportWidth="48" android:viewportHeight="48">
+    <path android:fillColor="#3B5BDB"
+        android:pathData="M10,4 H38 A6,6 0 0 1 44,10 V38 A6,6 0 0 1 38,44 H10 A6,6 0 0 1 4,38 V10 A6,6 0 0 1 10,4 Z" />
+    <path android:strokeColor="#FFFFFF" android:strokeWidth="4.2"
+        android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M15,34 V27 Q15,21 21,21 H27" />
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M26,13 L38,21 L26,29 Z" />
+</vector>

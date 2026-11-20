@@ -119,6 +119,8 @@
         <activity
             android:name=".OpenFileActivity"
             android:exported="true"
+            android:icon="@drawable/ic_shortcut_badge"
+            android:label="LinkIt - קיצור דרך"
             android:excludeFromRecents="true"
             android:taskAffinity=""
             android:theme="@style/LinkItLaunchTheme">
