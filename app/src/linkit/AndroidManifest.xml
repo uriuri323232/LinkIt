@@ -75,6 +75,11 @@
             <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
         </activity>
 
+        <!-- מדריך בתוך האפליקציה -->
+        <activity
+            android:name=".GuideActivity"
+            android:exported="false" />
+
         <!-- מנהל הקבצים המובנה. אין לו אייקון משלו במסך הבית (כדי שהאפליקציה לא תופיע פעמיים); נפתח מכפתור 📂 או מלחיצה ארוכה על האייקון -->
         <activity
             android:name=".BrowserActivity"

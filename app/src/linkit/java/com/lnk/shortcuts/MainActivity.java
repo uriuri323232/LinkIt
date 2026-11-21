@@ -638,7 +638,7 @@ public class MainActivity extends Activity {
     }
 
     private void showMenu() {
-        String[] labels = {"↕️  מיון הרשימה", "📤  ייצוא גיבוי", "📥  ייבוא גיבוי", "📦  ייצוא כל הקיצורים כקבצי .linkit לתיקייה", "📂  מנהל הקבצים", "📍  מנהל הקבצים המועדף שלי", "💡  איך זה עובד", "📋  צור קיצור מהלוח", "ℹ️  אודות"};
+        String[] labels = {"↕️  מיון הרשימה", "📤  ייצוא גיבוי", "📥  ייבוא גיבוי", "📦  ייצוא כל הקיצורים כקבצי .linkit לתיקייה", "📂  מנהל הקבצים", "📍  מנהל הקבצים המועדף שלי", "📖  מדריך: מה אפשר לעשות", "📋  צור קיצור מהלוח", "ℹ️  אודות"};
         AlertDialog d = new AlertDialog.Builder(this)
                 .setItems(labels, (dlg, which) -> {
                     switch (which) {
@@ -672,7 +672,7 @@ public class MainActivity extends Activity {
                             Launcher.pickPreferredFm(this);
                             break;
                         case 6:
-                            showHelp();
+                            startActivity(new Intent(this, GuideActivity.class));
                             break;
                         case 7:
                             fromClipboard();
