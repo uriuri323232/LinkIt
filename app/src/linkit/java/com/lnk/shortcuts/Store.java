@@ -91,12 +91,31 @@ final class Store {
         }
     }
 
+    /** כל הקטגוריות הקיימות, לפי סדר א-ב. */
+    static List<String> tags(Context c) {
+        java.util.TreeSet<String> set = new java.util.TreeSet<>();
+        for (Item it : all(c)) if (it.tag != null && !it.tag.isEmpty()) set.add(it.tag);
+        return new ArrayList<>(set);
+    }
+
+    static synchronized void setFav(Context c, String id, boolean fav) {
+        List<Item> list = all(c);
+        for (Item it : list) {
+            if (it.id.equals(id)) {
+                it.fav = fav;
+                saveAll(c, list);
+                return;
+            }
+        }
+    }
+
     static Item duplicate(Context c, Item src) {
         Item n = Item.fromJson(src.toJson());
         n.id = Item.newId();
         n.name = src.name + " (עותק)";
         n.uses = 0;
         n.lastUsed = 0;
+        n.fav = false;
         n.created = System.currentTimeMillis();
         File f = IconMaker.imageFile(c, src.id);
         if (f.exists()) {

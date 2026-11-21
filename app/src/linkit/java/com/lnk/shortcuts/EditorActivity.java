@@ -72,6 +72,7 @@ public class EditorActivity extends Activity {
     private TextView imgBtn;
     private EditText glyphEt;
     private TextView openWithLabel;
+    private EditText tagEt;
 
     @Override
     protected void onCreate(Bundle b) {
@@ -188,6 +189,7 @@ public class EditorActivity extends Activity {
         form.addView(top, Ui.lp(this, Ui.MATCH, Ui.WRAP, 0, 8, 0, 4));
 
         buildTarget();
+        buildOrganizeSection();
         buildIconSection();
 
         // כפתורים תחתונים
@@ -371,6 +373,38 @@ public class EditorActivity extends Activity {
                 s = "";
         }
         pickLabel.setText(s);
+    }
+
+    // ------------------------------------------------------- מועדף + קטגוריה
+
+    private void buildOrganizeSection() {
+        form.addView(Ui.section(this, "ארגון"));
+
+        final android.widget.Switch fs = new android.widget.Switch(this);
+        fs.setText("⭐  מועדף (מופיע בשורת ההפעלה המהירה בראש המסך)");
+        fs.setTextColor(Ui.text(this));
+        fs.setChecked(item.fav);
+        fs.setPadding(Ui.dp(this, 4), Ui.dp(this, 8), Ui.dp(this, 4), Ui.dp(this, 8));
+        fs.setOnCheckedChangeListener((v, checked) -> item.fav = checked);
+        add(fs);
+
+        tagEt = Ui.input(this, "קטגוריה (אופציונלי), למשל: עבודה", item.tag,
+                InputType.TYPE_CLASS_TEXT, false, false);
+        add(tagEt);
+
+        List<String> tags = Store.tags(this);
+        if (!tags.isEmpty()) {
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            for (final String tg : tags) {
+                TextView c = Ui.chip(this, "#" + tg, false, v -> tagEt.setText(tg));
+                row.addView(c, Ui.lp(this, Ui.WRAP, Ui.WRAP, 0, 0, 8, 0));
+            }
+            HorizontalScrollView hs = new HorizontalScrollView(this);
+            hs.setHorizontalScrollBarEnabled(false);
+            hs.addView(row);
+            add(hs);
+        }
     }
 
     // --------------------------------------------------------------- אייקון
@@ -893,6 +927,7 @@ public class EditorActivity extends Activity {
                 break;
         }
         item.name = name.isEmpty() ? Types.get(item.type).label : name;
+        item.tag = s(tagEt).replace("#", "").trim();
         return null;
     }
 

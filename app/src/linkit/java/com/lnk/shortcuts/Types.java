@@ -80,6 +80,22 @@ final class Types {
         return String.format(Locale.US, "%d:%02d", m, r);
     }
 
+    /** "לפני 3 ימים" וכדומה. */
+    static String ago(long t) {
+        long d = System.currentTimeMillis() - t;
+        if (d < 60_000L) return "הרגע";
+        long m = d / 60_000L;
+        if (m < 60) return "לפני " + m + " דק׳";
+        long h = m / 60;
+        if (h < 24) return "לפני " + h + " שע׳";
+        long days = h / 24;
+        if (days == 1) return "אתמול";
+        if (days < 30) return "לפני " + days + " ימים";
+        long mon = days / 30;
+        if (mon < 12) return "לפני " + mon + " חודשים";
+        return "לפני יותר משנה";
+    }
+
     static long parseSecs(String s) {
         try {
             return Long.parseLong(s.trim());

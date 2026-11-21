@@ -40,6 +40,13 @@ public class MainActivity extends Activity {
     private final List<Item> shown = new ArrayList<>();
     private String query = "";
     private String typeFilter = null;
+    private String tagFilter = null;
+    private HorizontalScrollView favScroll;
+    private LinearLayout favRow;
+    private LinearLayout banner;
+    private TextView bannerText;
+    private String bannerClip = "";
+    private String dismissedClip = "";
 
     private ListView list;
     private BaseAdapter adapter;
@@ -102,6 +109,50 @@ public class MainActivity extends Activity {
             query = search.getText().toString().trim();
             applyFilter();
         });
+
+        // באנר: קישור שהועתק ללוח
+        banner = new LinearLayout(this);
+        banner.setOrientation(LinearLayout.HORIZONTAL);
+        banner.setGravity(Gravity.CENTER_VERTICAL);
+        banner.setPadding(Ui.dp(this, 16), Ui.dp(this, 10), Ui.dp(this, 8), Ui.dp(this, 10));
+        banner.setBackground(Ui.rectStroke(this, Ui.tint(this), Ui.outline(this), 16));
+        bannerText = Ui.label(this, "", 14, Ui.text(this), true);
+        bannerText.setMaxLines(1);
+        bannerText.setEllipsize(TextUtils.TruncateAt.END);
+        banner.addView(bannerText, new LinearLayout.LayoutParams(0, Ui.WRAP, 1f));
+        TextView bannerGo = Ui.label(this, "צור קיצור", 14, Ui.onPrimary(this), true);
+        bannerGo.setGravity(Gravity.CENTER);
+        bannerGo.setPadding(Ui.dp(this, 14), Ui.dp(this, 8), Ui.dp(this, 14), Ui.dp(this, 8));
+        bannerGo.setBackground(Ui.press(this, Ui.rect(this, Ui.primary(this), 16)));
+        bannerGo.setClickable(true);
+        bannerGo.setOnClickListener(v -> {
+            banner.setVisibility(View.GONE);
+            dismissedClip = bannerClip;
+            fromClipboard();
+        });
+        banner.addView(bannerGo, Ui.lp(this, Ui.WRAP, Ui.WRAP, 8, 0, 0, 0));
+        TextView bannerX = Ui.label(this, "✕", 16, Ui.sub(this), true);
+        bannerX.setGravity(Gravity.CENTER);
+        bannerX.setMinWidth(Ui.dp(this, 40));
+        bannerX.setMinHeight(Ui.dp(this, 40));
+        bannerX.setClickable(true);
+        bannerX.setOnClickListener(v -> {
+            dismissedClip = bannerClip;
+            banner.setVisibility(View.GONE);
+        });
+        banner.addView(bannerX);
+        banner.setVisibility(View.GONE);
+        col.addView(banner, Ui.lp(this, Ui.MATCH, Ui.WRAP, 16, 6, 16, 0));
+
+        // שורת הפעלה מהירה: מועדפים
+        favScroll = new HorizontalScrollView(this);
+        favScroll.setHorizontalScrollBarEnabled(false);
+        favRow = new LinearLayout(this);
+        favRow.setOrientation(LinearLayout.HORIZONTAL);
+        favRow.setPadding(Ui.dp(this, 12), Ui.dp(this, 10), Ui.dp(this, 12), Ui.dp(this, 2));
+        favScroll.addView(favRow);
+        favScroll.setVisibility(View.GONE);
+        col.addView(favScroll);
 
         // סינון לפי סוג
         chipsScroll = new HorizontalScrollView(this);
@@ -169,11 +220,11 @@ public class MainActivity extends Activity {
         };
         list.setAdapter(adapter);
         list.setOnItemClickListener((p, v, pos, id) -> {
-            if (pos >= 0 && pos < shown.size()) showActions(shown.get(pos));
+            if (pos >= 0 && pos < shown.size()) Launcher.run(this, shown.get(pos), false);
         });
         list.setOnItemLongClickListener((p, v, pos, id) -> {
             if (pos < 0 || pos >= shown.size()) return false;
-            Launcher.run(this, shown.get(pos), false);
+            showActions(shown.get(pos));
             return true;
         });
 
@@ -215,6 +266,7 @@ public class MainActivity extends Activity {
             for (Item it : all) if (it.type.equals(typeFilter)) ok = true;
             if (!ok) typeFilter = null;
         }
+        if (tagFilter != null && !Store.tags(this).contains(tagFilter)) tagFilter = null;
         buildChips();
         applyFilter();
     }
@@ -230,20 +282,29 @@ public class MainActivity extends Activity {
                 }
             }
         }
-        chipsScroll.setVisibility(present.size() > 1 ? View.VISIBLE : View.GONE);
-        addChip("הכל · " + all.size(), null);
+        List<String> tags = Store.tags(this);
+        chipsScroll.setVisibility(present.size() > 1 || !tags.isEmpty() ? View.VISIBLE : View.GONE);
+        addChip("הכל · " + all.size(), null, null);
         for (String id : present) {
             Types.T t = Types.get(id);
             int n = 0;
             for (Item it : all) if (it.type.equals(id)) n++;
-            addChip(t.emoji + " " + t.label + " · " + n, id);
+            addChip(t.emoji + " " + t.label + " · " + n, id, null);
+        }
+        for (String tg : tags) {
+            int n = 0;
+            for (Item it : all) if (tg.equals(it.tag)) n++;
+            addChip("#" + tg + " · " + n, null, tg);
         }
     }
 
-    private void addChip(String label, final String type) {
-        boolean sel = (type == null && typeFilter == null) || (type != null && type.equals(typeFilter));
+    private void addChip(String label, final String type, final String tag) {
+        boolean sel = (type == null && tag == null && typeFilter == null && tagFilter == null)
+                || (type != null && type.equals(typeFilter))
+                || (tag != null && tag.equals(tagFilter));
         TextView c = Ui.chip(this, label, sel, v -> {
             typeFilter = type;
+            tagFilter = tag;
             buildChips();
             applyFilter();
         });
@@ -255,16 +316,19 @@ public class MainActivity extends Activity {
         String q = query.toLowerCase(Locale.ROOT);
         for (Item it : all) {
             if (typeFilter != null && !typeFilter.equals(it.type)) continue;
+            if (tagFilter != null && !tagFilter.equals(it.tag)) continue;
             if (!q.isEmpty()
                     && !(it.name.toLowerCase(Locale.ROOT).contains(q)
                     || it.d1.toLowerCase(Locale.ROOT).contains(q)
-                    || it.d2.toLowerCase(Locale.ROOT).contains(q))) continue;
+                    || it.d2.toLowerCase(Locale.ROOT).contains(q)
+                    || it.tag.toLowerCase(Locale.ROOT).contains(q))) continue;
             shown.add(it);
         }
         final String sort = Store.sort(this);
         Collections.sort(shown, new Comparator<Item>() {
             @Override
             public int compare(Item a, Item b) {
+                if (a.fav != b.fav) return a.fav ? -1 : 1;
                 switch (sort) {
                     case "name":
                         return a.name.compareToIgnoreCase(b.name);
@@ -289,6 +353,40 @@ public class MainActivity extends Activity {
             ((TextView) emptyView.getChildAt(2)).setText("לחץ על \"＋ חדש\" כדי ליצור קיצור לאתר, קובץ, אפליקציה, מספר טלפון ועוד. אפשר גם לשתף קישור מכל אפליקציה אל LinkIt.");
         }
         adapter.notifyDataSetChanged();
+        buildFavRow();
+    }
+
+    /** שורת מועדפים בראש המסך: הקשה מפעילה, לחיצה ארוכה פותחת פעולות. */
+    private void buildFavRow() {
+        favRow.removeAllViews();
+        int n = 0;
+        if (query.isEmpty() && typeFilter == null && tagFilter == null) {
+            for (final Item it : all) {
+                if (!it.fav) continue;
+                n++;
+                LinearLayout tile = new LinearLayout(this);
+                tile.setOrientation(LinearLayout.VERTICAL);
+                tile.setGravity(Gravity.CENTER_HORIZONTAL);
+                tile.setPadding(Ui.dp(this, 6), Ui.dp(this, 8), Ui.dp(this, 6), Ui.dp(this, 6));
+                tile.setBackground(Ui.press(this, Ui.rect(this, 0x00000000, 16)));
+                tile.setClickable(true);
+                ImageView iv = new ImageView(this);
+                iv.setImageBitmap(IconMaker.preview(this, it, Ui.dp(this, 56)));
+                tile.addView(iv, new LinearLayout.LayoutParams(Ui.dp(this, 56), Ui.dp(this, 56)));
+                TextView lb = Ui.label(this, it.name, 12, Ui.text(this), false);
+                lb.setGravity(Gravity.CENTER);
+                lb.setMaxLines(1);
+                lb.setEllipsize(TextUtils.TruncateAt.END);
+                tile.addView(lb, new LinearLayout.LayoutParams(Ui.dp(this, 68), Ui.WRAP));
+                tile.setOnClickListener(v -> Launcher.run(this, it, false));
+                tile.setOnLongClickListener(v -> {
+                    showActions(it);
+                    return true;
+                });
+                favRow.addView(tile);
+            }
+        }
+        favScroll.setVisibility(n > 0 ? View.VISIBLE : View.GONE);
     }
 
     // ------------------------------------------------------------ שורת רשימה
@@ -296,7 +394,7 @@ public class MainActivity extends Activity {
     private final class Row {
         final LinearLayout cell;
         final ImageView icon;
-        final TextView name, sub, pin;
+        final TextView name, sub, more;
         Item item;
 
         Row() {
@@ -330,25 +428,25 @@ public class MainActivity extends Activity {
             tlp.setMarginEnd(Ui.dp(MainActivity.this, 8));
             card.addView(texts, tlp);
 
-            pin = Ui.label(MainActivity.this, "הוסף", 13, Ui.primary(MainActivity.this), true);
-            pin.setGravity(Gravity.CENTER);
-            pin.setPadding(Ui.dp(MainActivity.this, 14), Ui.dp(MainActivity.this, 8),
-                    Ui.dp(MainActivity.this, 14), Ui.dp(MainActivity.this, 8));
-            pin.setBackground(Ui.press(MainActivity.this, Ui.rect(MainActivity.this, Ui.tint(MainActivity.this), 16)));
-            pin.setClickable(true);
-            pin.setOnClickListener(v -> {
-                if (item != null) Launcher.pin(MainActivity.this, item);
+            more = Ui.label(MainActivity.this, "⋮", 24, Ui.sub(MainActivity.this), true);
+            more.setGravity(Gravity.CENTER);
+            more.setMinWidth(Ui.dp(MainActivity.this, 40));
+            more.setMinHeight(Ui.dp(MainActivity.this, 48));
+            more.setClickable(true);
+            more.setOnClickListener(v -> {
+                if (item != null) showActions(item);
             });
-            card.addView(pin);
+            card.addView(more);
             cell.addView(card);
         }
 
         void bind(Item it) {
             item = it;
             icon.setImageBitmap(IconMaker.preview(MainActivity.this, it, Ui.dp(MainActivity.this, 48)));
-            name.setText(it.name);
+            name.setText(it.fav ? "⭐ " + it.name : it.name);
             String s = Types.subtitle(it);
-            if (it.uses > 0) s += "  ·  " + it.uses + "×";
+            if (!it.tag.isEmpty()) s += "  ·  #" + it.tag;
+            if (it.lastUsed > 0) s += "  ·  " + Types.ago(it.lastUsed);
             sub.setText(s);
         }
     }
@@ -356,29 +454,59 @@ public class MainActivity extends Activity {
     // ------------------------------------------------------------- פעולות
 
     private void showActions(final Item it) {
-        String[] labels = {"➕  הוסף למסך הבית", "▶️  הפעל עכשיו", "✏️  עריכה", "📄  שכפול", "🗑️  מחיקה", "📤  שמור כקובץ .linkit"};
+        final List<String> labels = new ArrayList<>();
+        final List<String> keys = new ArrayList<>();
+        labels.add("▶️  הפעל עכשיו"); keys.add("run");
+        labels.add(it.fav ? "☆  הסר ממועדפים" : "⭐  הוסף למועדפים"); keys.add("fav");
+        labels.add("➕  הוסף למסך הבית"); keys.add("pin");
+        labels.add("✏️  עריכה"); keys.add("edit");
+        labels.add("📄  שכפול"); keys.add("dup");
+        if (isTextual(it)) {
+            labels.add("📋  העתק יעד ללוח"); keys.add("copy");
+            labels.add("📨  שתף"); keys.add("share");
+        }
+        labels.add("📤  שמור כקובץ .linkit"); keys.add("export");
+        labels.add("🗑️  מחיקה"); keys.add("del");
         AlertDialog d = new AlertDialog.Builder(this)
                 .setTitle(it.name)
-                .setItems(labels, (dlg, which) -> {
-                    switch (which) {
-                        case 0:
-                            Launcher.pin(this, it);
-                            break;
-                        case 1:
+                .setItems(labels.toArray(new String[0]), (dlg, which) -> {
+                    switch (keys.get(which)) {
+                        case "run":
                             Launcher.run(this, it, false);
                             break;
-                        case 2:
+                        case "fav":
+                            Store.setFav(this, it.id, !it.fav);
+                            Launcher.syncDynamic(this);
+                            reload();
+                            Ui.toast(this, it.fav ? "הוסר ממועדפים" : "נוסף למועדפים");
+                            break;
+                        case "pin":
+                            Launcher.pin(this, it);
+                            break;
+                        case "edit":
                             startActivity(new Intent(this, EditorActivity.class).putExtra("id", it.id));
                             break;
-                        case 3:
+                        case "dup":
                             Store.duplicate(this, it);
                             reload();
                             Ui.toast(this, "הקיצור שוכפל");
                             break;
-                        case 4:
-                            confirmDelete(it);
+                        case "copy": {
+                            android.content.ClipboardManager cm =
+                                    (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+                            cm.setPrimaryClip(android.content.ClipData.newPlainText(it.name, it.d1));
+                            dismissedClip = it.d1;
+                            Ui.toast(this, "הועתק ללוח");
                             break;
-                        case 5: {
+                        }
+                        case "share": {
+                            Intent i = new Intent(Intent.ACTION_SEND);
+                            i.setType("text/plain");
+                            i.putExtra(Intent.EXTRA_TEXT, it.d1);
+                            startActivity(Intent.createChooser(i, it.name));
+                            break;
+                        }
+                        case "export": {
                             exportItem = it;
                             Intent i = new Intent(Intent.ACTION_CREATE_DOCUMENT);
                             i.addCategory(Intent.CATEGORY_OPENABLE);
@@ -387,11 +515,63 @@ public class MainActivity extends Activity {
                             startActivityForResult(i, REQ_EXPORT_ONE);
                             break;
                         }
+                        case "del":
+                            confirmDelete(it);
+                            break;
                     }
                 })
                 .create();
         d.show();
         Ui.rtl(d.getWindow().getDecorView());
+    }
+
+    /** האם ליעד יש טקסט שאפשר להעתיק או לשתף (קישור, מספר, כתובת, טקסט). */
+    private static boolean isTextual(Item it) {
+        switch (it.type) {
+            case "url":
+            case "text":
+            case "call":
+            case "sms":
+            case "whatsapp":
+            case "email":
+            case "map":
+                return !it.d1.isEmpty();
+            default:
+                return false;
+        }
+    }
+
+    // ---------------------------------------------------- באנר: קישור בלוח
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (!hasFocus || banner == null) return;
+        String url = null;
+        try {
+            android.content.ClipboardManager cm = (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+            if (cm != null && cm.hasPrimaryClip() && cm.getPrimaryClip().getItemCount() > 0) {
+                CharSequence cs = cm.getPrimaryClip().getItemAt(0).coerceToText(this);
+                if (cs != null) {
+                    String t = cs.toString().trim();
+                    if (t.length() < 600 && t.matches("(?s)^(https?://|www\\.)\\S+$")) url = t;
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        if (url == null || url.equals(dismissedClip)) {
+            banner.setVisibility(View.GONE);
+            return;
+        }
+        for (Item it : all) {
+            if (url.equals(it.d1)) {
+                banner.setVisibility(View.GONE);
+                return;
+            }
+        }
+        bannerClip = url;
+        bannerText.setText("🔗 הועתק קישור: " + url);
+        banner.setVisibility(View.VISIBLE);
     }
 
     private void confirmDelete(final Item it) {
@@ -573,8 +753,11 @@ public class MainActivity extends Activity {
 
     private void showHelp() {
         String msg = "• לחץ \"＋ חדש\", בחר סוג וצור קיצור. הוא נשמר כאן וגם מתווסף למסך הבית.\n\n"
-                + "• לחיצה ארוכה על קיצור ברשימה מפעילה אותו מיד.\n\n"
-                + "• לחיצה על קיצור ברשימה: הוספה מחדש למסך הבית, הפעלה, עריכה, שכפול ומחיקה.\n\n"
+                + "• לחיצה על קיצור ברשימה מפעילה אותו מיד.\n\n"
+                + "• לחיצה ארוכה או ⋮: מועדפים, הוספה למסך הבית, עריכה, שכפול, העתקה, שיתוף ומחיקה.\n\n"
+                + "• ⭐ מועדפים מופיעים בשורת הפעלה מהירה בראש המסך.\n\n"
+                + "• קטגוריות: בעריכת קיצור אפשר לתת לו קטגוריה, והיא תופיע כתג לסינון (#). \n\n"
+                + "• כשמעתיקים קישור באפליקציה אחרת, מופיע כאן באנר ליצירת קיצור בלחיצה אחת.\n\n"
                 + "• עריכת קיצור (שם, אייקון, יעד) מעדכנת אוטומטית גם את הקיצור שכבר נמצא במסך הבית.\n\n"
                 + "• \"תפריט\" הוא קיצור אחד שפותח חלון עם כמה קיצורים לבחירה.\n\n"
                 + "• בכל אפליקציה: שתף קישור או טקסט ← LinkIt, ותוכל ליצור ממנו קיצור מיד.\n\n"

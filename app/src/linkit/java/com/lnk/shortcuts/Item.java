@@ -21,6 +21,10 @@ final class Item {
     int uses = 0;
     /** חץ קיצור על האייקון (כמו בווינדוס). */
     boolean arrow = true;
+    /** מועדף: מופיע בשורת ההפעלה המהירה בראש המסך. */
+    boolean fav = false;
+    /** קטגוריה חופשית (אופציונלי), לסינון ברשימה. */
+    String tag = "";
 
     static String newId() {
         return UUID.randomUUID().toString().replace("-", "").substring(0, 12);
@@ -42,6 +46,8 @@ final class Item {
             o.put("lastUsed", lastUsed);
             o.put("uses", uses);
             o.put("arrow", arrow);
+            o.put("fav", fav);
+            o.put("tag", tag);
         } catch (JSONException ignored) {
         }
         return o;
@@ -62,6 +68,8 @@ final class Item {
         it.lastUsed = o.optLong("lastUsed", 0);
         it.uses = o.optInt("uses", 0);
         it.arrow = o.optBoolean("arrow", true);
+        it.fav = o.optBoolean("fav", false);
+        it.tag = o.optString("tag", "");
         return it;
     }
 }

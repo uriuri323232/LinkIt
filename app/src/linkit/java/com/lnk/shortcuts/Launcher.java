@@ -469,6 +469,7 @@ final class Launcher {
             Collections.sort(sorted, new Comparator<Item>() {
                 @Override
                 public int compare(Item a, Item b) {
+                    if (a.fav != b.fav) return a.fav ? -1 : 1;
                     return Long.compare(Math.max(b.lastUsed, b.created), Math.max(a.lastUsed, a.created));
                 }
             });
